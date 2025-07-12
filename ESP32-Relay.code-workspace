@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../ESP32-Relay"
+		},
+		{
+			"name": "ESP32_ETHRELAY",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
