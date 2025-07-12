@@ -74,6 +74,7 @@ void setup() {
   
   Serial.println("Serial communication established!");
   Serial.println("System initializing...");
+  Serial.println("NOTE: Using ACTIVE-LOW relay module (HIGH=OFF, LOW=ON)");
   
   // Initialize relay pins
   pinMode(IN1, OUTPUT);
@@ -81,11 +82,11 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
-  // Turn off all relays initially (HIGH = OFF for most relay modules)
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
+  // Turn off all relays initially (HIGH = OFF for active-low relay modules)
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, HIGH);
   
   // Initialize ethernet with fixed IP
   Serial.println("------------------------");
@@ -186,7 +187,8 @@ void setup() {
       Serial.println(ETH.localIP());
     } else {
       Serial.println("ERROR: Unable to configure IP. Check network settings!");
-      Serial.println("Expected IP range: 192.168.1.224 - 192.168.1.255");
+      Serial.println("Current subnet /27 allows IPs: 192.168.1.0-31 or 192.168.1.224-255");
+      Serial.print("Your IP (192.168.1.11) should work with /27 subnet");
       Serial.print("Configured IP: ");
       Serial.println(local_IP);
       Serial.print("Gateway: ");
@@ -242,7 +244,7 @@ void loop() {
   delay(1000);
 }
 
-// Function to control relays
+// Function to control relays (active-low logic)
 void controlRelay(int relayNum, bool state) {
   int pin;
   switch(relayNum) {
@@ -253,13 +255,18 @@ void controlRelay(int relayNum, bool state) {
     default: return;
   }
   
-  digitalWrite(pin, state ? HIGH : LOW);
+  // Inverted logic for active-low relay modules
+  // state=true (ON) -> digitalWrite LOW
+  // state=false (OFF) -> digitalWrite HIGH
+  digitalWrite(pin, state ? LOW : HIGH);
   relayStates[relayNum - 1] = state;
   
   Serial.print("Relay ");
   Serial.print(relayNum);
   Serial.print(" set to ");
   Serial.println(state ? "ON" : "OFF");
+  Serial.print("  -> GPIO pin set to ");
+  Serial.println(state ? "LOW" : "HIGH");
 }
 
 // Function to get relay status JSON
