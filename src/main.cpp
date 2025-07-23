@@ -10,7 +10,7 @@ void controlRelay(int relayNum, bool state);
 String getRelayStatusJSON();
 
 // Network configuration
-IPAddress local_IP(192, 168, 1, 11);  // Fixed IP address
+IPAddress local_IP(192, 168, 1, 12);  // Fixed IP address
 IPAddress gateway(192, 168, 1, 1);     // Gateway IP  
 IPAddress subnet(255, 255, 255, 224);  // Subnet mask /27 (192.168.1.224-255)
 IPAddress primaryDNS(8, 8, 8, 8);      // Primary DNS (optional)
