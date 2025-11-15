@@ -1,237 +1,175 @@
-# ESP32 WT32-ETH01 Relay Controller
+# ESP32-ETH01-WifiMQTT-Controller
 
-A web-based relay control system for the WT32-ETH01 ESP32 board with Ethernet connectivity. This project provides a modern web interface and REST API to control 4 relay channels over Ethernet.
+Contrôleur générique d'I/O pour WT32-ETH01 avec Ethernet prioritaire et fallback WiFi.
 
-## Features
+## Description
 
-- ✅ **Ethernet Connectivity**: Fixed IP configuration with WT32-ETH01
-- ✅ **Web Interface**: Modern, responsive HTML interface
-- ✅ **REST API**: RESTful endpoints for automation integration
-- ✅ **Real-time Status**: Live status updates every 2 seconds
-- ✅ **4-Channel Control**: Independent control of 4 relay channels
-- ✅ **Async Operation**: Non-blocking web server implementation
+Ce projet est basé sur le ESP32-WifiMQTTRelay avec les adaptations suivantes pour la board WT32-ETH01:
+- **Ethernet par défaut**: Connexion Ethernet prioritaire pour une latence minimale
+- **Fallback WiFi**: Bascule automatique sur WiFi si Ethernet échoue
+- **MQTT**: Contrôle et monitoring via MQTT avec synchronisation temporelle microseconde
+- **Interface Web**: Configuration complète via interface web (SPIFFS)
+- **I/O configurables**: Jusqu'à 20 I/O configurables (entrées/sorties)
+- **OTA**: Mise à jour Over-The-Air via ElegantOTA
 
-## Hardware Requirements
+## Caractéristiques
 
-- **WT32-ETH01** ESP32 board with Ethernet
-- **4-Channel Relay Module** (5V or 3.3V compatible)
-- **Ethernet Cable** and network connection
-- **Power Supply** (5V for relay module, 3.3V for ESP32)
+### Réseau
+- **Ethernet WT32-ETH01 (LAN8720)** - Connexion prioritaire
+- **WiFi** - Fallback automatique avec WiFiManager
+- **IP statique ou DHCP** - Configurable
+- **MQTT** - Contrôle temps réel avec précision microseconde
+- **Synchronisation temporelle** - Via MQTT (précision μs)
 
-## Pin Configuration
+### I/O
+- **Entrées**: INPUT, INPUT_PULLUP, INPUT_PULLDOWN
+- **Sorties**: Avec état par défaut configurable
+- **Détection de changement**: Réactivité 1ms via tâche FreeRTOS
+- **Commandes programmées**: Exécution avec précision microseconde
 
-| Relay | ESP32 Pin | GPIO |
-|-------|-----------|------|
-| IN1   | GPIO2     | 2    |
-| IN2   | GPIO4     | 4    |
-| IN3   | GPIO14    | 14   |
-| IN4   | GPIO15    | 15   |
+### Interface
+- **Web UI**: Configuration complète depuis le navigateur
+- **API REST**: Contrôle et statut en JSON
+- **OTA**: Mises à jour firmware via web
 
-## Network Configuration
+## Configuration Matérielle
 
-Default network settings (modify in `src/main.cpp`):
+### WT32-ETH01
+- **Ethernet**: PHY LAN8720
+  - MDC: GPIO 23
+  - MDIO: GPIO 18
+  - Power: GPIO 16
+  - CLK: GPIO 0
+- **LED Status**: GPIO 2
+- **Bouton BOOT**: GPIO 0 (triple-press pour reset WiFi)
 
-```cpp
-IPAddress local_IP(192, 168, 1, 184);    // Fixed IP address
-IPAddress gateway(192, 168, 1, 1);       // Gateway IP
-IPAddress subnet(255, 255, 255, 0);      // Subnet mask
-IPAddress primaryDNS(8, 8, 8, 8);        // Primary DNS
-IPAddress secondaryDNS(8, 8, 4, 4);      // Secondary DNS
-```
+### GPIO Disponibles
+Les GPIO suivants sont disponibles pour configuration:
+- GPIO 4, 5, 12, 13, 14, 15, 17, 32, 33
 
-## Installation & Setup
+**⚠️ GPIO Réservés:**
+- 0, 2, 16, 18, 23 (Ethernet + LED)
 
-### 1. Prerequisites
+## Installation
 
-- [PlatformIO](https://platformio.org/) installed
-- VS Code with PlatformIO extension (recommended)
-
-### 2. Clone and Build
-
+### PlatformIO
 ```bash
-git clone <your-repo-url>
-cd ESP32_ETHRELAY
-pio run
+# Cloner le projet
+cd ESP32-ETH01-WifiMQTT-Controller
+
+# Compiler et uploader
+pio run -t upload
+
+# Uploader le système de fichiers SPIFFS
+pio run -t uploadfs
+
+# Monitor série
+pio device monitor -b 115200
 ```
 
-### 3. Upload to Board
+## Configuration
 
-```bash
-pio run --target upload
+### Première utilisation
+1. Connecter le câble Ethernet
+2. Le système démarre automatiquement en mode Ethernet
+3. Accéder à l'interface web via l'IP DHCP ou IP statique configurée
+4. Configurer les I/O, MQTT et autres paramètres
+
+### Fallback WiFi
+Si Ethernet échoue:
+1. Le système bascule automatiquement sur WiFi
+2. Un portail captif s'ouvre: **ESP32-Controller-Setup**
+3. Connecter au WiFi et configurer les credentials
+4. L'appareil redémarre et se connecte au WiFi
+
+### Reset WiFi
+Triple-appui sur le bouton BOOT dans les 5 secondes au démarrage pour effacer les credentials WiFi.
+
+## API REST
+
+### Statut
+```http
+GET /api/status
 ```
+Retourne le statut complet du système (réseau, MQTT, I/O, heure)
 
-### 4. Monitor Serial Output
+### Contrôle I/O
+```http
+POST /api/io/set
+Content-Type: application/json
 
-```bash
-pio device monitor
-```
-
-## Web Interface
-
-After uploading and connecting the Ethernet cable, access the web interface at:
-
-**http://192.168.1.184/**
-
-### Interface Features
-
-- **Visual Status Indicators**: Green (ON) / Red (OFF) status for each relay
-- **Control Buttons**: START/STOP buttons for each relay
-- **Auto-refresh**: Status updates automatically every 2 seconds
-- **Responsive Design**: Works on desktop and mobile devices
-
-## REST API Endpoints
-
-### Control Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/relay1/start` | Turn Relay 1 ON |
-| POST | `/relay1/stop` | Turn Relay 1 OFF |
-| POST | `/relay2/start` | Turn Relay 2 ON |
-| POST | `/relay2/stop` | Turn Relay 2 OFF |
-| POST | `/relay3/start` | Turn Relay 3 ON |
-| POST | `/relay3/stop` | Turn Relay 3 OFF |
-| POST | `/relay4/start` | Turn Relay 4 ON |
-| POST | `/relay4/stop` | Turn Relay 4 OFF |
-
-### Status Endpoint
-
-| Method | Endpoint | Description | Response |
-|--------|----------|-------------|----------|
-| GET | `/status` | Get all relay states | JSON |
-
-### Example API Usage
-
-```bash
-# Turn relay 1 ON
-curl -X POST http://192.168.1.184/relay1/start
-
-# Turn relay 1 OFF
-curl -X POST http://192.168.1.184/relay1/stop
-
-# Get status of all relays
-curl http://192.168.1.184/status
-```
-
-### Status Response Format
-
-```json
 {
-  "relay1": true,
-  "relay2": false,
-  "relay3": true,
-  "relay4": false
+  "name": "relay1",
+  "state": true
 }
 ```
 
-## Libraries Used
-
-- **ESP Async WebServer** (v1.2.3): Asynchronous web server
-- **AsyncTCP** (v1.1.1): Asynchronous TCP library for ESP32
-- **ETH** (built-in): Ethernet support for ESP32
-
-## Wiring Diagram
-
-```
-WT32-ETH01          Relay Module
------------         ------------
-GPIO2        -----> IN1
-GPIO4        -----> IN2  
-GPIO14       -----> IN3
-GPIO15       -----> IN4
-GND          -----> GND
-3.3V         -----> VCC (if 3.3V relay)
+### Configuration I/O
+```http
+GET /api/ios
+POST /api/ios
 ```
 
-**Note**: If using a 5V relay module, you may need a logic level converter or use 5V from an external power supply.
-
-## Customization
-
-### Changing Network Settings
-
-Edit the network configuration in `src/main.cpp`:
-
-```cpp
-// Network configuration
-IPAddress local_IP(192, 168, 1, 184);  // Change this IP
-IPAddress gateway(192, 168, 1, 1);     // Your router IP
-IPAddress subnet(255, 255, 255, 0);    // Subnet mask
+### Configuration Système
+```http
+GET /api/config
+POST /api/config
 ```
 
-### Changing Relay Pins
+## MQTT
 
-Modify the pin assignments in `src/main.cpp`:
+### Topics
 
-```cpp
-// Relay pins
-int IN1 = 2;   // Change to desired GPIO
-int IN2 = 4;   // Change to desired GPIO
-int IN3 = 14;  // Change to desired GPIO
-int IN4 = 15;  // Change to desired GPIO
+#### Contrôle
+```
+{deviceName}/control/{ioName}/set
+Payload: {"state": 1, "exec_at": 1234567890, "exec_at_us": 123456}
 ```
 
-### Relay Logic
-
-Current implementation uses **ACTIVE HIGH** logic:
-- `HIGH` = Relay ON
-- `LOW` = Relay OFF
-
-For **ACTIVE LOW** relays, change the `controlRelay()` function:
-
-```cpp
-digitalWrite(pin, state ? LOW : HIGH);  // Inverted logic
+#### Statut
+```
+{deviceName}/status/{ioName}
+Payload: {"state": 1, "timestamp": 1234567890, "us": 123456}
 ```
 
-## Troubleshooting
-
-### Common Issues
-
-1. **"setupWebServer was not declared"**
-   - Ensure function declarations are at the top of main.cpp
-   - Verify the function is defined later in the file
-
-2. **Ethernet not connecting**
-   - Check cable connection
-   - Verify network settings match your network
-   - Check if IP address is available (not used by another device)
-
-3. **Relay not responding**
-   - Verify wiring connections
-   - Check if relay module requires 5V instead of 3.3V
-   - Test with multimeter for signal output
-
-4. **Web page not loading**
-   - Verify IP address in browser
-   - Check serial monitor for connection status
-   - Ensure firewall is not blocking port 80
-
-### Serial Monitor Output
-
-Normal startup sequence:
+#### Synchronisation temporelle
 ```
-ETH Started
-ETH Connected
-ETH MAC: XX:XX:XX:XX:XX:XX, IPv4: 192.168.1.184, GW: 192.168.1.1, DNS: 8.8.8.8
-Ethernet connected!
-IP address: 192.168.1.184
-HTTP server started
+esp32/time/sync
+Payload: {"seconds": 1234567890, "us": 123456, "compensations": {...}}
 ```
 
-## Contributing
+#### Mesure latence
+```
+{deviceName}/ping
+{deviceName}/pong
+```
 
-Feel free to submit issues and pull requests to improve this project.
+## Dépendances
 
-## License
+- ESP32 Arduino Core
+- ESPAsyncWebServer
+- AsyncTCP
+- ArduinoJson 7.x
+- PubSubClient (MQTT)
+- WiFiManager
+- ElegantOTA
+- NTPClient
 
-This project is open source. Use and modify as needed for your projects.
+## Différences avec ESP32-WifiMQTTRelay
 
-## Version History
+1. **Ethernet prioritaire**: WT32-ETH01 démarre en mode Ethernet par défaut
+2. **LED Status**: GPIO 2 au lieu de GPIO 23
+3. **Nom par défaut**: `esp32-eth01` au lieu de `esp32`
+4. **Config automatique**: Force le mode Ethernet au premier démarrage
 
-- **v1.0**: Initial release with basic relay control
-- **v1.1**: Added web interface and REST API
-- **v1.2**: Improved error handling and documentation
+## Licence
 
----
+Ce projet est dérivé de ESP32-WifiMQTTRelay et adapté pour WT32-ETH01.
 
-**Author**: Created for WT32-ETH01 ESP32 relay control applications
-**Date**: July 2025
+## Notes
+
+- La LED sur GPIO 2 indique le statut (clignotements pendant l'initialisation)
+- Ethernet est prioritaire sur WiFi pour une latence minimale
+- Le fallback WiFi permet une haute disponibilité
+- La synchronisation temporelle MQTT permet une précision microseconde
+- Les commandes programmées sont exécutées avec précision microseconde
