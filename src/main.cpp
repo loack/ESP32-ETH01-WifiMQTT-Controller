@@ -371,25 +371,15 @@ void setup() {
     Serial.println("✓ Config portal stopped to free port 80");
   }
 
-   // Démarrage du serveur
-  server.begin();
-  String ipAddress = config.useEthernet ? ETH.localIP().toString() : WiFi.localIP().toString();
-  Serial.println("✓ Web server started");
-  Serial.println("\n========================================");
-  Serial.println("Access the web interface at:");
-  Serial.print("http://");
-  Serial.println(ipAddress);
-  Serial.println("========================================\n");
-
-  // Setup Web Server
-  setupWebServer();
-
-  // Initialize SPIFFS
+  // Initialize SPIFFS AVANT de configurer le serveur web
   if(!SPIFFS.begin(true)){
     Serial.println("An Error has occurred while mounting SPIFFS");
     return;
   }
   Serial.println("SPIFFS mounted successfully.");
+
+  // Setup Web Server (configure toutes les routes)
+  setupWebServer();
 
   // Setup MQTT
   setupMQTT();
@@ -400,19 +390,25 @@ void setup() {
   }
 
   // === DÉMARRAGE TÂCHE I/O ===
-  // Crée la tâche pour gérer les I/O sur le coeur 0, avec une haute priorité
   xTaskCreatePinnedToCore(
-      handleIOs,        // Fonction de la tâche
-      "IOTask",         // Nom de la tâche
-      4096,             // Taille de la pile
-      NULL,             // Paramètres de la tâche
-      1,                // Priorité
-      &ioTaskHandle,    // Handle de la tâche
-      0);               // Cœur 0
+      handleIOs,        
+      "IOTask",         
+      4096,             
+      NULL,             
+      1,                
+      &ioTaskHandle,    
+      0);               
 
+  // Démarrage du serveur web (UNE SEULE FOIS, après avoir configuré toutes les routes)
   server.begin();
-  Serial.println("Web server started and configured.");
-  Serial.println("========================================");
+  String ipAddress = config.useEthernet ? ETH.localIP().toString() : WiFi.localIP().toString();
+  Serial.println("✓ Web server started");
+  Serial.println("\n========================================");
+  Serial.println("Access the web interface at:");
+  Serial.print("http://");
+  Serial.println(ipAddress);
+  Serial.println("========================================\n");
+  
   blinkStatusLED(1, 500);  // Signal de démarrage complet
 }
 
