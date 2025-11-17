@@ -219,21 +219,7 @@ void setup() {
   Serial.println("SDK Version: " + String(ESP.getSdkVersion()));
 
   pinMode(STATUS_LED, OUTPUT);
-  pinMode(RESET_WIFI_BUTTON, INPUT_PULLUP);  // Configure button before use
   blinkStatusLED(3, 200);
-
-  // Check for WiFi reset BEFORE any network initialization
-  if (checkTriplePress()) {
-    Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
-    preferences.begin("generic-io", false);
-    wifiManager.resetSettings();
-    preferences.putInt("wifiFailCount", 0);
-    preferences.end();
-    delay(1000);
-    Serial.println("Credentials erased. Restarting...");
-    delay(2000);
-    ESP.restart();
-  }
 
   // Load configuration from flash
   preferences.begin("generic-io", false);
@@ -290,6 +276,19 @@ void setup() {
   
   if (!config.useEthernet) {
     // MODE WiFi
+    pinMode(RESET_WIFI_BUTTON, INPUT_PULLUP);  // Configure button for WiFi mode
+    
+    // Check for WiFi reset (triple press) - only when using WiFi
+    if (checkTriplePress()) {
+      Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
+      wifiManager.resetSettings();
+      preferences.putInt("wifiFailCount", 0);
+      delay(1000);
+      Serial.println("Credentials erased. Restarting...");
+      delay(2000);
+      ESP.restart();
+    }
+    
     // Configuration WiFiManager (AVANT les paramètres WiFi)
     wifiManager.setConfigPortalTimeout(180);  // 3 minutes pour configurer
     wifiManager.setConnectTimeout(30);        // 30 secondes pour se connecter
