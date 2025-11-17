@@ -174,12 +174,15 @@ bool initEthernet() {
       }
     }
     
-    // Wait for connection
+    // Wait for connection with improved feedback
     unsigned long startAttemptTime = millis();
-    while (!ethConnected && millis() - startAttemptTime < 10000) {
-      delay(100);
+    Serial.print("Waiting for Ethernet connection");
+    while (!ethConnected && millis() - startAttemptTime < 15000) {
+      delay(500);
+      Serial.print(".");
       blinkStatusLED(1, 50);
     }
+    Serial.println();
     
     if (ethConnected) {
       Serial.println("✓✓✓ ETHERNET CONNECTED ✓✓✓");
@@ -189,7 +192,8 @@ bool initEthernet() {
       Serial.println(ETH.gatewayIP());
       return true;
     } else {
-      Serial.println("✗ Ethernet connection failed");
+      Serial.println("✗ Ethernet connection timeout (no link detected)");
+      Serial.println("Check: Cable connection, router port, PHY power");
       return false;
     }
   }
@@ -215,7 +219,21 @@ void setup() {
   Serial.println("SDK Version: " + String(ESP.getSdkVersion()));
 
   pinMode(STATUS_LED, OUTPUT);
+  pinMode(RESET_WIFI_BUTTON, INPUT_PULLUP);  // Configure button before use
   blinkStatusLED(3, 200);
+
+  // Check for WiFi reset BEFORE any network initialization
+  if (checkTriplePress()) {
+    Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
+    preferences.begin("generic-io", false);
+    wifiManager.resetSettings();
+    preferences.putInt("wifiFailCount", 0);
+    preferences.end();
+    delay(1000);
+    Serial.println("Credentials erased. Restarting...");
+    delay(2000);
+    ESP.restart();
+  }
 
   // Load configuration from flash
   preferences.begin("generic-io", false);
@@ -255,14 +273,19 @@ void setup() {
   bool networkConnected = false;
   
   // MODE ETHERNET (par défaut pour WT32-ETH01)
-  Serial.println("\n🌐 Ethernet mode enabled (WT32-ETH01)");
-  
-  if (initEthernet()) {
-    networkConnected = true;
-    digitalWrite(STATUS_LED, LOW);
-  } else {
-    Serial.println("⚠️ Ethernet failed, switching to WiFi fallback");
-    config.useEthernet = false; // Fallback to WiFi
+  if (config.useEthernet) {
+    Serial.println("\n🌐 Ethernet mode enabled (WT32-ETH01)");
+    
+    if (initEthernet()) {
+      networkConnected = true;
+      digitalWrite(STATUS_LED, LOW);
+    } else {
+      Serial.println("⚠️ Ethernet failed, switching to WiFi fallback");
+      Serial.println("Note: GPIO0 will be reconfigured for WiFi");
+      delay(500);
+      
+      config.useEthernet = false; // Fallback to WiFi
+    }
   }
   
   if (!config.useEthernet) {
@@ -272,16 +295,6 @@ void setup() {
     wifiManager.setConnectTimeout(30);        // 30 secondes pour se connecter
     wifiManager.setConnectRetries(3);         // 3 tentatives de connexion
     wifiManager.setDebugOutput(true);         // Activer le debug
-    
-    // Vérifier triple appui pour reset WiFi
-    if (checkTriplePress()) {
-      Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
-      wifiManager.resetSettings();
-      delay(1000);
-      Serial.println("Credentials erased. Restarting...");
-      delay(2000);
-      ESP.restart();
-    }
     
     // Tentative de connexion WiFi
     Serial.println("\n⏱ Starting WiFi configuration...");
