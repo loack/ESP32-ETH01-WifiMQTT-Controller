@@ -33,8 +33,8 @@ unsigned long lastMqttReconnect = 0;
 bool ethConnected = false;
 void WiFiEvent(WiFiEvent_t event);
 
-// Bouton pour reset WiFi (bouton BOOT sur ESP32)
-#define RESET_WIFI_BUTTON 0
+// Bouton pour reset WiFi - GPIO39 (disponible sur WT32-ETH01)
+#define RESET_WIFI_BUTTON 39
 #define STATUS_LED 2  // LED on WT32-ETH01 (GPIO2)
 
 // ===== PROTOTYPES =====
@@ -62,7 +62,7 @@ bool checkTriplePress() {
   bool lastState = HIGH;
   
   Serial.println("\n⏱ WiFi Reset Check (5 seconds window)...");
-  Serial.println("Press BOOT button 3 times to reset WiFi credentials");
+  Serial.println("Press button on GPIO39 three times to reset WiFi credentials");
   
   while (millis() - startTime < 5000) {  // 5 secondes
     bool currentState = digitalRead(RESET_WIFI_BUTTON);
@@ -240,11 +240,14 @@ void setup() {
   
   loadConfig();
   
-  // Force Ethernet mode par défaut sur WT32-ETH01
+  // Force Ethernet type sur WT32-ETH01
   if (strlen(config.ethernetType) == 0) {
     strcpy(config.ethernetType, "WT32-ETH01");
-    config.useEthernet = true;
+  }
+  if (!config.initialized) {
+    config.initialized = true;
     saveConfig();
+    Serial.println("First boot detected - Configuration initialized");
   }
   
   loadIOs();
@@ -258,27 +261,26 @@ void setup() {
   // ===== NETWORK INITIALIZATION =====
   bool networkConnected = false;
   
-  // MODE ETHERNET (par défaut pour WT32-ETH01)
-  if (config.useEthernet) {
-    Serial.println("\n🌐 Ethernet mode enabled (WT32-ETH01)");
-    
-    if (initEthernet()) {
-      networkConnected = true;
-      digitalWrite(STATUS_LED, LOW);
-    } else {
-      Serial.println("⚠️ Ethernet failed, switching to WiFi fallback");
-      Serial.println("Note: GPIO0 will be reconfigured for WiFi");
-      delay(500);
-      
-      config.useEthernet = false; // Fallback to WiFi
-    }
-  }
+  // TOUJOURS essayer Ethernet en premier sur WT32-ETH01
+  Serial.println("\n🌐 Attempting Ethernet connection (WT32-ETH01)...");
   
-  if (!config.useEthernet) {
-    // MODE WiFi
-    pinMode(RESET_WIFI_BUTTON, INPUT_PULLUP);  // Configure button for WiFi mode
+  if (initEthernet()) {
+    // Ethernet OK
+    networkConnected = true;
+    config.useEthernet = true;
+    digitalWrite(STATUS_LED, LOW);
+    Serial.println("✓ Using Ethernet as primary network");
+  } else {
+    // Ethernet FAILED - Basculer vers WiFi
+    Serial.println("⚠️ Ethernet failed, switching to WiFi fallback");
     
-    // Check for WiFi reset (triple press) - only when using WiFi
+    config.useEthernet = false;
+    
+    // MODE WiFi - Configure GPIO39 pour le bouton de reset
+    pinMode(RESET_WIFI_BUTTON, INPUT_PULLUP);
+    delay(100);  // Stabiliser le pull-up
+    
+    // Check for WiFi reset (triple press) - seulement en mode WiFi fallback
     if (checkTriplePress()) {
       Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
       wifiManager.resetSettings();
