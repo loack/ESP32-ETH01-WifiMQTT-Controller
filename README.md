@@ -53,6 +53,10 @@ Les GPIO suivants sont disponibles pour configuration:
 ## Installation
 
 ### PlatformIO
+
+## API MQTT
+
+La communication avec le module via MQTT est documentée dans le fichier [MQTT_API.md](MQTT_API.md).
 ```bash
 # Cloner le projet
 cd ESP32-ETH01-WifiMQTT-Controller
