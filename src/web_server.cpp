@@ -238,6 +238,26 @@ void setupWebServer() {
     }
   );
 
+  // API pour simuler un message RX série et le publier sur MQTT
+  server.on("/api/serial/simulate-rx", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+      JsonDocument doc;
+      if (deserializeJson(doc, (const char*)data) != DeserializationError::Ok) {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Invalid JSON\"}");
+        return;
+      }
+      
+      if (doc["message"]) {
+        String msg = doc["message"].as<String>();
+        serialManager.publish(msg); // Utilise la nouvelle fonction pour publier
+        serialManager.addLog("RX (Sim)", msg); // Ajoute au log local comme une simulation
+        request->send(200, "application/json", "{\"success\":true, \"message\":\"Simulated RX message published to MQTT\"}");
+      } else {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Missing message\"}");
+      }
+    }
+  );
+
   // API pour récupérer les logs série
   server.on("/api/serial/logs", HTTP_GET, [](AsyncWebServerRequest *request){
     JsonDocument doc;

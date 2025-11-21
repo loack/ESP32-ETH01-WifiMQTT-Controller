@@ -183,14 +183,12 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     // Handle Serial Bridge commands
     if (topicStr.equals(baseTopic + "/serial/send")) {
         if (config.useSerialBridge) {
-            Serial.println("-> MQTT to Serial command received.");
-            JsonDocument doc;
-            DeserializationError error = deserializeJson(doc, payload, length);
-            if (!error && doc["message"].is<const char*>()) {
-                serialManager.send(doc["message"].as<String>());
-            } else {
-                Serial.println("   -> ERROR: Could not parse JSON or find 'message' key.");
-            }
+            char message[length + 1];
+            memcpy(message, payload, length);
+            message[length] = '\0';
+            
+            Serial.printf("MQTT to Serial command received: %s\n", message);
+            serialManager.send(String(message));
         } else {
             // This case should not happen if not subscribed, but as a safeguard:
             Serial.println("-> WARNING: Received serial message but bridge is disabled.");

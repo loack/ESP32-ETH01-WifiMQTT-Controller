@@ -16,14 +16,14 @@ public:
     void begin();
     void loop();
     void send(String message);
+    void publish(String message);
     std::vector<SerialLog> getLogs();
     void clearLogs();
+    void addLog(String direction, String message);
 
 private:
     HardwareSerial* _serial;
     std::vector<SerialLog> _logs;
-    void addLog(String direction, String message);
-    void checkReservedPins(int rx, int tx);
 };
 
 extern SerialManager serialManager;

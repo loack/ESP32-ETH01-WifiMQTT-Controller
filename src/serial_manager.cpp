@@ -13,87 +13,67 @@ SerialManager::SerialManager() {
     _serial = &Serial2; // Use Serial2 for external communication
 }
 
-void SerialManager::checkReservedPins(int rx, int tx) {
-    const int reservedPins[] = {0, 2, 16, 18, 23};
-    for (int pin : reservedPins) {
-        if (rx == pin || tx == pin) {
-            Serial.printf("WARNING: Serial pin %d is a reserved pin for Ethernet or status LED. This may cause conflicts.\n", pin);
-        }
-    }
-}
-
 void SerialManager::begin() {
     if (config.useSerialBridge) {
-        // Default pins if not configured (check available pins on WT32-ETH01)
-        // Using 4 and 5 as default if 0
-        int rx = config.serialRxPin != 0 ? config.serialRxPin : 4;
-        int tx = config.serialTxPin != 0 ? config.serialTxPin : 5;
+        const int rxPin = 5;
+        const int txPin = 17;
         long baud = config.serialBaudRate > 0 ? config.serialBaudRate : 9600;
 
-        checkReservedPins(rx, tx);
-
-        _serial->begin(baud, SERIAL_8N1, rx, tx);
-        Serial.printf("Serial Bridge started on RX:%d, TX:%d at %ld baud\n", rx, tx, baud);
+        _serial->begin(baud, SERIAL_8N1, rxPin, txPin);
+        Serial.printf("Serial Bridge started on RX:%d, TX:%d at %ld baud\n", rxPin, txPin, baud);
     }
 }
 
 void SerialManager::loop() {
     if (!config.useSerialBridge) return;
 
-    int avail = _serial->available();
-    if (avail > 0) {
-        Serial.printf("Serial2 available bytes: %d\n", avail);
-
-        // Read up to available bytes into a temporary buffer so we don't block
-        int toRead = avail;
-        if (toRead > 511) toRead = 511;
-        char buf[512];
-        int n = _serial->readBytes(buf, toRead);
-        buf[n] = '\0';
-
-        // Convert to String and split lines if multiple lines were received
-        String msg = String(buf);
+    if (_serial->available()) {
+        String msg = _serial->readStringUntil('\n');
         msg.trim();
-        Serial.printf("Serial2 raw read (%d bytes): '%s'\n", n, msg.c_str());
 
         if (msg.length() > 0) {
             addLog("RX", msg);
             Serial.println("Serial Bridge RX: " + msg);
-
-            // Publish received message to MQTT
-            if (mqttEnabled && mqttClient.connected()) {
-                char topic[128];
-                snprintf(topic, sizeof(topic), "%s/serial/receive", config.deviceName);
-
-                JsonDocument doc;
-                doc["message"] = msg;
-                
-                time_t now;
-                time(&now);
-                struct tm timeinfo;
-                localtime_r(&now, &timeinfo);
-                char timeStr[25];
-                strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
-                doc["timestamp"] = timeStr;
-
-                char payload[256];
-                serializeJson(doc, payload);
-
-                Serial.printf("Publishing serial RX to topic [%s]: %s\n", topic, payload);
-                publishMQTT(topic, payload);
-            } else {
-                Serial.println("MQTT not connected or disabled - serial message not published");
-            }
+            publish(msg);
         }
     }
 }
 
 void SerialManager::send(String message) {
     if (!config.useSerialBridge) return;
-    
+
     _serial->println(message);
     addLog("TX", message);
     Serial.println("Serial Bridge TX: " + message);
+}
+
+void SerialManager::publish(String message) {
+    if (!config.useSerialBridge) return;
+
+    // Publish received message to MQTT
+    if (mqttEnabled && mqttClient.connected()) {
+        char topic[128];
+        snprintf(topic, sizeof(topic), "%s/serial/receive", config.deviceName);
+
+        JsonDocument doc;
+        doc["message"] = message;
+        
+        time_t now;
+        time(&now);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        char timeStr[25];
+        strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+        doc["timestamp"] = timeStr;
+
+        char payload[256];
+        serializeJson(doc, payload);
+        
+        Serial.printf("Publishing serial RX to topic [%s]: %s\n", topic, payload);
+        publishMQTT(topic, payload);
+    } else {
+        Serial.println("MQTT not connected or disabled - serial message not published");
+    }
 }
 
 void SerialManager::addLog(String direction, String message) {

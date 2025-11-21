@@ -181,6 +181,17 @@
                 </div>
                 <button class="btn btn-primary btn-small" style="margin-top: 10px;" onclick="loadSerialLogs()">Rafraîchir</button>
             </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h3>Simuler un message RX</h3>
+                <div class="form-group">
+                    <label>Simuler la réception d'un message sur le port série (publié sur MQTT)</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="serial-simulate-rx-message" placeholder="Message à simuler...">
+                        <button class="btn btn-primary" onclick="simulateSerialRx()">Simuler & Publier</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <!-- TAB UPDATE -->
         <div id="update" class="tab-content">
@@ -448,6 +459,25 @@
             if (data.success) {
                 document.getElementById('serial-message').value = '';
                 loadSerialLogs();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        });
+    }
+
+    function simulateSerialRx() {
+        const msg = document.getElementById('serial-simulate-rx-message').value;
+        if (!msg) return;
+        
+        fetch('/api/serial/simulate-rx', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ message: msg })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                document.getElementById('serial-simulate-rx-message').value = '';
+                alert('Message de simulation RX publié sur MQTT.');
+                loadSerialLogs(); // Rafraîchir les logs pour voir le message simulé
             } else {
                 alert('Erreur: ' + data.message);
             }
