@@ -79,7 +79,12 @@ def on_connect(client, userdata, flags, reason_code, properties):
         # S'abonner au topic pong pour mesurer la latence
         pong_topic = f"{DEVICE_NAME}/pong"
         client.subscribe(pong_topic)
-        print(f"✓ Abonné à: {pong_topic}\n")
+        print(f"✓ Abonné à: {pong_topic}")
+
+        # S'abonner au topic de réception série
+        serial_receive_topic = f"{DEVICE_NAME}/serial/receive"
+        client.subscribe(serial_receive_topic)
+        print(f"✓ Abonné à: {serial_receive_topic}\n")
     else:
         print(f"✗ Échec de connexion, code: {reason_code}")
 
@@ -184,6 +189,12 @@ def on_message(client, userdata, msg):
             print(f"📨 Message (non-JSON ou mal formé) reçu: {topic} = {payload}")
 
     # Gérer les autres messages (disponibilité, etc.)
+    elif topic.endswith("/serial/receive"):
+        try:
+            data = json.loads(payload)
+            print(f"🖥️  SERIAL RX via MQTT: {data.get('message')}")
+        except json.JSONDecodeError:
+            print(f"🖥️  SERIAL RX (raw): {payload}")
     else:
         print(f"📨 Message reçu: {topic} = {payload}")
 
@@ -333,7 +344,25 @@ def synchronized_toggle_all_devices(client, relay_name="RelaisK1", delay_seconds
     print(f"✓ Test de synchronisation terminé")
     print(f"{'='*60}\n")
 
+def send_serial_message_via_mqtt(client, message):
+    """Envoie un message à l'ESP32 pour qu'il le transmette sur son port série."""
+    if not client.is_connected():
+        print("⚠ Client MQTT non connecté")
+        return
+
+    topic = f"{DEVICE_NAME}/serial/send"
+    payload = json.dumps({"message": message})
+    
+    result = client.publish(topic, payload, qos=1)
+    
+    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+        print(f"✓ Message série envoyé via MQTT: \"{message}\"")
+    else:
+        print(f"✗ Erreur lors de l'envoi du message série via MQTT")
+
+
 # ========== MENU INTERACTIF ==========
+
 def show_menu():
     """Affiche le menu des commandes"""
     print("\n" + "="*50)
@@ -351,6 +380,7 @@ def show_menu():
     print(f"{offset+5}. Mesurer la compensation réseau")
     print(f"{offset+6}. 🎬 TEST SYNC MULTI-ESP32 (laser + lilygo)")
     print(f"{offset+7}. 🔄 Changer de device")
+    print(f"{offset+8}. Envoyer message série à l'ESP32")
     print("0. Quitter")
     print("="*50)
 
@@ -763,6 +793,11 @@ def main():
                 # Changer de device
                 elif choice == num_relays*2 + 7:
                     switch_device(client)
+                # Envoyer message série à l'ESP32
+                elif choice == num_relays*2 + 8:
+                    msg = input("Message à envoyer via Serial2: ").strip()
+                    if msg:
+                        send_serial_message_via_mqtt(client, msg)
                 
                 else:
                     print("❌ Option invalide")
