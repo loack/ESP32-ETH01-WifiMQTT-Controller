@@ -40,9 +40,22 @@ void SerialManager::begin() {
 void SerialManager::loop() {
     if (!config.useSerialBridge) return;
 
-    if (_serial->available()) {
-        String msg = _serial->readStringUntil('\n');
+    int avail = _serial->available();
+    if (avail > 0) {
+        Serial.printf("Serial2 available bytes: %d\n", avail);
+
+        // Read up to available bytes into a temporary buffer so we don't block
+        int toRead = avail;
+        if (toRead > 511) toRead = 511;
+        char buf[512];
+        int n = _serial->readBytes(buf, toRead);
+        buf[n] = '\0';
+
+        // Convert to String and split lines if multiple lines were received
+        String msg = String(buf);
         msg.trim();
+        Serial.printf("Serial2 raw read (%d bytes): '%s'\n", n, msg.c_str());
+
         if (msg.length() > 0) {
             addLog("RX", msg);
             Serial.println("Serial Bridge RX: " + msg);
@@ -65,8 +78,11 @@ void SerialManager::loop() {
 
                 char payload[256];
                 serializeJson(doc, payload);
-                
+
+                Serial.printf("Publishing serial RX to topic [%s]: %s\n", topic, payload);
                 publishMQTT(topic, payload);
+            } else {
+                Serial.println("MQTT not connected or disabled - serial message not published");
             }
         }
     }
