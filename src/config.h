@@ -65,6 +65,12 @@ struct Config {
   long gmtOffset_sec;
   int daylightOffset_sec;
 
+  // Serial Bridge Settings
+  bool useSerialBridge;
+  int serialRxPin;
+  int serialTxPin;
+  long serialBaudRate;
+
   bool initialized;
 };
 

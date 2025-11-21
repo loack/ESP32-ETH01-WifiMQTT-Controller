@@ -55,6 +55,7 @@
         <button class="tab" onclick="switchTab(event, 'ios')">Configuration I/O</button>
         <button class="tab" onclick="switchTab(event, 'config')">Configuration Système</button>
         <button class="tab" onclick="switchTab(event, 'network')">Réseau</button>
+        <button class="tab" onclick="switchTab(event, 'serial')">Série</button>
         <button class="tab" onclick="switchTab(event, 'update')">Mise à Jour</button>
     </div>
     <div class="content">
@@ -102,6 +103,19 @@
                 <div class="form-group"><label>Port</label><input type="number" id="mqtt-port" value="1883"></div>
                 <div class="form-group"><label>Utilisateur</label><input type="text" id="mqtt-user"></div>
                 <div class="form-group"><label>Mot de passe</label><input type="password" id="mqtt-password" placeholder="Laisser vide pour ne pas changer"></div>
+                
+                <h3 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">Configuration Pont Série</h3>
+                <div class="form-group">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="use-serial-bridge">
+                        <span class="slider"></span>
+                    </label>
+                    <span style="margin-left: 10px; font-weight: bold;">Activer le Pont Série</span>
+                </div>
+                <div class="form-group"><label>Pin RX</label><input type="number" id="serial-rx-pin" placeholder="Ex: 4"></div>
+                <div class="form-group"><label>Pin TX</label><input type="number" id="serial-tx-pin" placeholder="Ex: 5"></div>
+                <div class="form-group"><label>Baudrate</label><input type="number" id="serial-baudrate" value="9600"></div>
+
                 <button class="btn btn-primary" onclick="saveConfig()">💾 Enregistrer & Redémarrer</button>
             </div>
             <h2 style="margin-top: 30px;">Contrôle de la Connexion</h2>
@@ -150,6 +164,24 @@
                 <button class="btn btn-primary" onclick="saveConfig()">💾 Enregistrer & Redémarrer</button>
             </div>
         </div>
+        <!-- TAB SERIAL -->
+        <div id="serial" class="tab-content">
+            <h2>Console Série (RS232/RS485)</h2>
+            <div class="card">
+                <div class="form-group">
+                    <label>Envoyer un message</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="serial-message" placeholder="Message à envoyer...">
+                        <button class="btn btn-primary" onclick="sendSerialMessage()">Envoyer</button>
+                    </div>
+                </div>
+                <h3 style="margin-top: 20px;">Logs Série</h3>
+                <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
+                    <p style="color: #999;">Chargement des logs...</p>
+                </div>
+                <button class="btn btn-primary btn-small" style="margin-top: 10px;" onclick="loadSerialLogs()">Rafraîchir</button>
+            </div>
+        </div>
         <!-- TAB UPDATE -->
         <div id="update" class="tab-content">
             <h2>Mise à Jour Firmware (OTA)</h2>
@@ -171,6 +203,7 @@
         if (tabName === 'status') loadStatus();
         if (tabName === 'ios') loadIOs();
         if (tabName === 'config' || tabName === 'network') loadConfig();
+        if (tabName === 'serial') loadSerialLogs();
     }
 
     function toggleStaticFields() {
@@ -310,6 +343,12 @@
             document.getElementById('mqtt-port').value = data.mqttPort;
             document.getElementById('mqtt-user').value = data.mqttUser;
 
+            // Serial settings
+            document.getElementById('use-serial-bridge').checked = data.useSerialBridge;
+            document.getElementById('serial-rx-pin').value = data.serialRxPin;
+            document.getElementById('serial-tx-pin').value = data.serialTxPin;
+            document.getElementById('serial-baudrate').value = data.serialBaudRate;
+
             // Network settings
             document.getElementById('network-type').value = data.useEthernet ? 'ethernet' : 'wifi';
             document.getElementById('ethernet-board-type').value = data.ethernetType || 'WT32-ETH01';
@@ -330,6 +369,12 @@
             mqttPort: parseInt(document.getElementById('mqtt-port').value),
             mqttUser: document.getElementById('mqtt-user').value,
             mqttPassword: document.getElementById('mqtt-password').value,
+            
+            useSerialBridge: document.getElementById('use-serial-bridge').checked,
+            serialRxPin: parseInt(document.getElementById('serial-rx-pin').value),
+            serialTxPin: parseInt(document.getElementById('serial-tx-pin').value),
+            serialBaudRate: parseInt(document.getElementById('serial-baudrate').value),
+
             useEthernet: document.getElementById('network-type').value === 'ethernet',
             ethernetType: document.getElementById('ethernet-board-type').value,
             useStaticIP: document.getElementById('ip-type').value === 'static',
@@ -365,6 +410,48 @@
                 alert(data.message);
                 loadStatus();
             });
+    }
+
+    function loadSerialLogs() {
+        fetch('/api/serial/logs').then(r => r.json()).then(data => {
+            const logsDiv = document.getElementById('serial-logs');
+            logsDiv.innerHTML = '';
+            if (data.length === 0) {
+                logsDiv.innerHTML = '<p style="color: #999;">Aucun log disponible.</p>';
+                return;
+            }
+            
+            // Afficher les logs du plus récent au plus ancien (ou inversement selon préférence)
+            // Ici on affiche tel quel (l'ordre dépend du backend, supposons chronologique)
+            // On va inverser pour avoir le plus récent en haut
+            data.reverse().forEach(log => {
+                const color = log.direction === 'TX' ? '#2ecc71' : '#3498db';
+                const icon = log.direction === 'TX' ? '⬆️' : '⬇️';
+                logsDiv.innerHTML += `<div style="border-bottom: 1px solid #eee; padding: 5px 0;">
+                    <span style="color: #999; font-size: 12px;">[${log.timestamp}]</span>
+                    <span style="color: ${color}; font-weight: bold; margin: 0 5px;">${icon} ${log.direction}</span>
+                    <span>${log.message}</span>
+                </div>`;
+            });
+        });
+    }
+
+    function sendSerialMessage() {
+        const msg = document.getElementById('serial-message').value;
+        if (!msg) return;
+        
+        fetch('/api/serial/send', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ message: msg })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                document.getElementById('serial-message').value = '';
+                loadSerialLogs();
+            } else {
+                alert('Erreur: ' + data.message);
+            }
+        });
     }
 
     window.onload = () => {

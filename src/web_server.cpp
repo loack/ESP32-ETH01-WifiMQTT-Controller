@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include "config.h"
 #include "mqtt.h"
+#include "serial_manager.h"
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -151,6 +152,11 @@ void setupWebServer() {
     doc["mqttPort"] = config.mqttPort;
     doc["mqttUser"] = config.mqttUser;
     doc["mqttTopic"] = config.mqttTopic;
+
+    doc["useSerialBridge"] = config.useSerialBridge;
+    doc["serialRxPin"] = config.serialRxPin;
+    doc["serialTxPin"] = config.serialTxPin;
+    doc["serialBaudRate"] = config.serialBaudRate;
     
     String response;
     serializeJson(doc, response);
@@ -187,6 +193,11 @@ void setupWebServer() {
       }
       if (doc["mqttTopic"]) strlcpy(config.mqttTopic, doc["mqttTopic"], sizeof(config.mqttTopic));
       
+      if (doc["useSerialBridge"].is<bool>()) config.useSerialBridge = doc["useSerialBridge"];
+      if (doc["serialRxPin"]) config.serialRxPin = doc["serialRxPin"];
+      if (doc["serialTxPin"]) config.serialTxPin = doc["serialTxPin"];
+      if (doc["serialBaudRate"]) config.serialBaudRate = doc["serialBaudRate"];
+
       saveConfig();
       
       request->send(200, "application/json", "{\"success\":true, \"message\":\"Configuration enregistrée, redémarrage...\"}");
@@ -206,6 +217,43 @@ void setupWebServer() {
     mqttEnabled = false;
     mqttClient.disconnect();
     request->send(200, "application/json", "{\"success\":true, \"message\":\"MQTT déconnecté.\"}");
+  });
+
+  // API pour envoyer un message série
+  server.on("/api/serial/send", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+      JsonDocument doc;
+      if (deserializeJson(doc, (const char*)data) != DeserializationError::Ok) {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Invalid JSON\"}");
+        return;
+      }
+      
+      if (doc["message"]) {
+        String msg = doc["message"].as<String>();
+        serialManager.send(msg);
+        request->send(200, "application/json", "{\"success\":true, \"message\":\"Message sent\"}");
+      } else {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Missing message\"}");
+      }
+    }
+  );
+
+  // API pour récupérer les logs série
+  server.on("/api/serial/logs", HTTP_GET, [](AsyncWebServerRequest *request){
+    JsonDocument doc;
+    JsonArray logs = doc.to<JsonArray>();
+    
+    std::vector<SerialLog> serialLogs = serialManager.getLogs();
+    for (const auto& log : serialLogs) {
+      JsonObject l = logs.add<JsonObject>();
+      l["timestamp"] = log.timestamp;
+      l["direction"] = log.direction;
+      l["message"] = log.message;
+    }
+    
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
   });
 
   // ElegantOTA pour les mises à jour

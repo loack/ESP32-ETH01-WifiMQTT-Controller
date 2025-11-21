@@ -13,6 +13,7 @@
 
 #include "config.h"
 #include "mqtt.h"
+#include "serial_manager.h"
 
 // ===== GLOBAL OBJECTS =====
 AsyncWebServer server(80);
@@ -258,6 +259,9 @@ void setup() {
   Serial.println("I/O pin configurations applied.");
   blinkStatusLED(2, 100);
 
+  // Initialize Serial Bridge
+  serialManager.begin();
+
   // ===== NETWORK INITIALIZATION =====
   bool networkConnected = false;
   
@@ -419,6 +423,7 @@ void loop() {
   // I/O handling is moved to a separate FreeRTOS task.
 
   processScheduledCommands();
+  serialManager.loop();
 
   // Check network connection (WiFi or Ethernet)
   bool networkOk = config.useEthernet ? ethConnected : (WiFi.status() == WL_CONNECTED);
@@ -508,6 +513,11 @@ void loadConfig() {
   config.gmtOffset_sec = preferences.getLong("gmtOffset", 3600);
   config.daylightOffset_sec = preferences.getInt("daylightOff", 3600);
 
+  config.useSerialBridge = preferences.getBool("useSerial", false);
+  config.serialRxPin = preferences.getInt("serRx", 4);
+  config.serialTxPin = preferences.getInt("serTx", 5);
+  config.serialBaudRate = preferences.getLong("serBaud", 9600);
+
   config.initialized = preferences.getBool("init", false);
   Serial.println("Configuration loaded.");
 }
@@ -530,6 +540,12 @@ void saveConfig() {
   //preferences.putString("ntpSrv", config.ntpServer); // No longer needed
   preferences.putLong("gmtOffset", config.gmtOffset_sec);
   preferences.putInt("daylightOff", config.daylightOffset_sec);
+  
+  preferences.putBool("useSerial", config.useSerialBridge);
+  preferences.putInt("serRx", config.serialRxPin);
+  preferences.putInt("serTx", config.serialTxPin);
+  preferences.putLong("serBaud", config.serialBaudRate);
+
   preferences.putBool("init", true);
   Serial.println("Configuration saved.");
 }
