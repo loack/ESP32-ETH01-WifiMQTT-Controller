@@ -1,13 +1,25 @@
 #include "serial_manager.h"
 #include "config.h"
+#include "mqtt.h"
 #include <time.h>
+#include <ArduinoJson.h>
 
 extern Config config;
+extern bool mqttEnabled;
 
 SerialManager serialManager;
 
 SerialManager::SerialManager() {
     _serial = &Serial2; // Use Serial2 for external communication
+}
+
+void SerialManager::checkReservedPins(int rx, int tx) {
+    const int reservedPins[] = {0, 2, 16, 18, 23};
+    for (int pin : reservedPins) {
+        if (rx == pin || tx == pin) {
+            Serial.printf("WARNING: Serial pin %d is a reserved pin for Ethernet or status LED. This may cause conflicts.\n", pin);
+        }
+    }
 }
 
 void SerialManager::begin() {
@@ -17,6 +29,8 @@ void SerialManager::begin() {
         int rx = config.serialRxPin != 0 ? config.serialRxPin : 4;
         int tx = config.serialTxPin != 0 ? config.serialTxPin : 5;
         long baud = config.serialBaudRate > 0 ? config.serialBaudRate : 9600;
+
+        checkReservedPins(rx, tx);
 
         _serial->begin(baud, SERIAL_8N1, rx, tx);
         Serial.printf("Serial Bridge started on RX:%d, TX:%d at %ld baud\n", rx, tx, baud);
@@ -32,6 +46,28 @@ void SerialManager::loop() {
         if (msg.length() > 0) {
             addLog("RX", msg);
             Serial.println("Serial Bridge RX: " + msg);
+
+            // Publish received message to MQTT
+            if (mqttEnabled && mqttClient.connected()) {
+                char topic[128];
+                snprintf(topic, sizeof(topic), "%s/serial/receive", config.deviceName);
+
+                JsonDocument doc;
+                doc["message"] = msg;
+                
+                time_t now;
+                time(&now);
+                struct tm timeinfo;
+                localtime_r(&now, &timeinfo);
+                char timeStr[25];
+                strftime(timeStr, sizeof(timeStr), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+                doc["timestamp"] = timeStr;
+
+                char payload[256];
+                serializeJson(doc, payload);
+                
+                publishMQTT(topic, payload);
+            }
         }
     }
 }

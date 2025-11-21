@@ -8,6 +8,23 @@ Le nom de l'appareil (`<device_name>`) est utilisé comme base pour tous les suj
 
 ## 2. Points d'Entrée (Contrôle de l'ESP32)
 
+### 2.4. Pont Série (Serial Bridge)
+
+Permet d'envoyer des messages série à un périphérique connecté (ex: robot KUKA) via MQTT.
+
+- **Sujet :** `<device_name>/serial/send`
+- **Méthode :** Publier
+- **Payload (JSON) :**
+  ```json
+  {
+    "message": "Commande KUKA VKRC2"
+  }
+  ```
+- **Effet :** Le message est transmis sur le port série (Serial2) configuré. Un log TX est généré et visible via l'API REST ou l'UI web.
+
+#### Synchronisation et logs
+Chaque message reçu via MQTT et transmis sur le port série est journalisé (timestamp, direction TX, contenu). Les réponses reçues sur le port série peuvent être publiées en MQTT (voir ci-dessous).
+
 ### 2.1. Contrôle des Broches de Sortie
 
 Pour commander une broche configurée en sortie.
@@ -63,6 +80,36 @@ Pour mesurer le temps d'aller-retour entre le maître et l'appareil.
 - **Payload :** N'importe quelle chaîne de caractères. Le payload sera renvoyé dans le message `pong`.
 
 ## 3. Points de Sortie (Données de l'ESP32)
+
+### 3.4. Retour Série (Serial Bridge)
+
+L'ESP32 publie les messages reçus sur le port série (RX) vers MQTT.
+
+- **Sujet :** `<device_name>/serial/receive`
+- **Méthode :** Message publié par l'ESP32.
+- **Payload (JSON) :**
+  ```json
+  {
+    "message": "Réponse KUKA VKRC2",
+    "timestamp": "2025-11-21T14:32:10Z"
+  }
+  ```
+- **Effet :** Permet au superviseur ou au robot maître de recevoir les réponses ou statuts du périphérique série.
+
+### 3.5. Log Série (optionnel)
+
+Pour audit ou debug, l'ESP32 peut publier périodiquement ou sur demande l'historique des échanges série.
+
+- **Sujet :** `<device_name>/serial/log`
+- **Méthode :** Message publié par l'ESP32.
+- **Payload (JSON) :**
+  ```json
+  [
+    { "timestamp": "2025-11-21T14:32:10Z", "direction": "TX", "message": "..." },
+    { "timestamp": "2025-11-21T14:32:11Z", "direction": "RX", "message": "..." }
+  ]
+  ```
+- **Effet :** Permet de suivre l'historique complet des échanges série (TX/RX).
 
 ### 3.1. État des Broches
 

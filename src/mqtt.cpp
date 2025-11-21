@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <PubSubClient.h>
 #include "mqtt.h"
+#include "serial_manager.h"
 #include <ArduinoJson.h>
 #include <time.h>
 #include <sys/time.h>
@@ -179,6 +180,18 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
         return;
     }
 
+    // Handle Serial Bridge commands
+    if (topicStr.equals(baseTopic + "/serial/send")) {
+        if (config.useSerialBridge) {
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, payload, length);
+            if (!error && doc["message"].is<const char*>()) {
+                serialManager.send(doc["message"].as<String>());
+            }
+        }
+        return;
+    }
+
     // Check if it's a control topic for a pin
     String controlTopicPrefix = baseTopic + "/control/";
     if (!topicStr.startsWith(controlTopicPrefix) || !topicStr.endsWith("/set")) {
@@ -276,6 +289,13 @@ void reconnectMQTT() {
     String pingTopic = String(config.deviceName) + "/ping";
     mqttClient.subscribe(pingTopic.c_str());
     Serial.printf("✓ Abonné à: %s\n", pingTopic.c_str());
+
+    // Subscribe to serial bridge topic
+    if (config.useSerialBridge) {
+        String serialTopic = String(config.deviceName) + "/serial/send";
+        mqttClient.subscribe(serialTopic.c_str());
+        Serial.printf("✓ Abonné à: %s\n", serialTopic.c_str());
+    }
     
     Serial.println("========================================");
     Serial.println();

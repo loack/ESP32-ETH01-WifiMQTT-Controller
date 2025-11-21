@@ -261,6 +261,11 @@ void setup() {
 
   // Initialize Serial Bridge
   serialManager.begin();
+  if (config.useSerialBridge) {
+    Serial.println("Serial Bridge is enabled.");
+  } else {
+    Serial.println("Serial Bridge is disabled.");
+  }
 
   // ===== NETWORK INITIALIZATION =====
   bool networkConnected = false;

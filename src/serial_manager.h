@@ -23,6 +23,7 @@ private:
     HardwareSerial* _serial;
     std::vector<SerialLog> _logs;
     void addLog(String direction, String message);
+    void checkReservedPins(int rx, int tx);
 };
 
 extern SerialManager serialManager;
