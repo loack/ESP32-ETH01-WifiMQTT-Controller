@@ -29,6 +29,9 @@ pending_commands = {}
 device_latencies = {}  # device_name -> {'samples': [], 'avg_rtt_us': 0, 'avg_latency_us': 0, 'last_measurement': 0}
 MAX_SAMPLES = 20
 
+# Réduction nombre message affichage pour plus de clarté
+TIME_MESSAGE_DISPLAY = False
+
 # Tracker global des pings en attente
 ping_tracker = {
     'ping_times': {}  # ping_id -> (time, device_name)
@@ -195,6 +198,11 @@ def on_message(client, userdata, msg):
             print(f"🖥️  SERIAL RX via MQTT: {data.get('message')}")
         except json.JSONDecodeError:
             print(f"🖥️  SERIAL RX (raw): {payload}")
+    
+    #on affiche les messages de sync uniquement si demandé
+    if topic.endswith("/time/sync"):
+        if TIME_MESSAGE_DISPLAY:
+            print(f"⏰ Timestamp sync reçu: {payload}")
     else:
         print(f"📨 Message reçu: {topic} = {payload}")
 
@@ -615,17 +623,18 @@ def publish_time(client):
             
             time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(seconds))
             
-            # Afficher avec info de latence si disponible
-            if device_latencies:
-                compensations_str = ", ".join([f"{dev}:{lat['avg_latency_us']/1000:.1f}ms" 
-                                               for dev, lat in device_latencies.items() 
-                                               if lat['avg_latency_us'] > 0])
-                if compensations_str:
-                    print(f"⏰ Sync: {seconds}.{microseconds:06d} | Compensations: [{compensations_str}]")
+            if TIME_MESSAGE_DISPLAY:
+                # Afficher avec info de latence si disponible
+                if device_latencies:
+                    compensations_str = ", ".join([f"{dev}:{lat['avg_latency_us']/1000:.1f}ms" 
+                                                for dev, lat in device_latencies.items() 
+                                                if lat['avg_latency_us'] > 0])
+                    if compensations_str:
+                        print(f"⏰ Sync: {seconds}.{microseconds:06d} | Compensations: [{compensations_str}]")
+                    else:
+                        print(f"⏰ Sync: {seconds}.{microseconds:06d} (mesure latence en cours...)")
                 else:
-                    print(f"⏰ Sync: {seconds}.{microseconds:06d} (mesure latence en cours...)")
-            else:
-                print(f"⏰ Sync: {seconds}.{microseconds:06d} (aucun device détecté)")
+                    print(f"⏰ Sync: {seconds}.{microseconds:06d} (aucun device détecté)")
         
         time.sleep(10)  # Synchroniser toutes les 10 secondes
 
