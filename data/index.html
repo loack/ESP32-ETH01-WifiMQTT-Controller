@@ -75,6 +75,12 @@
             <div class="grid" id="outputs-control"><p>Aucune sortie configurée.</p></div>
             <h2 style="margin-top: 30px;">État des Entrées</h2>
             <div class="grid" id="inputs-status"><p>Aucune entrée configurée.</p></div>
+
+            <h3 style="margin-top: 20px;">Logs</h3>
+            <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
+                <p style="color: #999;">Chargement des logs...</p>
+            </div>
+            <button class="btn btn-primary btn-small" style="margin-top: 10px;" onclick="loadLogs()">Rafraîchir</button>
         </div>
         <!-- TAB CONFIG I/O -->
         <div id="ios" class="tab-content">
@@ -488,6 +494,46 @@
         loadStatus();
         setInterval(loadStatus, 5000);
     };
+    
+    // WebSocket for real-time logs (fallback to HTTP polling remains available)
+    (function(){
+        const proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+        const wsUrl = proto + location.host + '/ws';
+        let socket;
+        try {
+            socket = new WebSocket(wsUrl);
+        } catch (e) {
+            console.warn('WebSocket not available', e);
+            return;
+        }
+        socket.onopen = () => {
+            console.log('WS connected to', wsUrl);
+        };
+        socket.onmessage = (evt) => {
+            try {
+                const data = JSON.parse(evt.data);
+                if (data.type === 'serial_log') {
+                    const logsDiv = document.getElementById('serial-logs');
+                    const el = document.createElement('div');
+                    el.style.borderBottom = '1px solid #eee';
+                    el.style.padding = '5px 0';
+                    el.innerHTML = `<span style="color:#999; font-size:12px;">[${data.timestamp}]</span> <strong style="margin:0 6px; color:#3498db;">${data.direction}</strong> ${data.message}`;
+                    // insert at top
+                    if (logsDiv.firstChild) logsDiv.insertBefore(el, logsDiv.firstChild);
+                    else logsDiv.appendChild(el);
+                }
+            } catch (e) {
+                // Not JSON — could be server welcome; append raw
+                const logsDiv = document.getElementById('serial-logs');
+                const el = document.createElement('div');
+                el.textContent = evt.data;
+                if (logsDiv.firstChild) logsDiv.insertBefore(el, logsDiv.firstChild);
+                else logsDiv.appendChild(el);
+            }
+        };
+        socket.onclose = () => console.log('WS closed');
+        socket.onerror = (e) => console.warn('WS error', e);
+    })();
 </script>
 </body>
 </html>

@@ -15,6 +15,19 @@
 #include "mqtt.h"
 #include "serial_manager.h"
 
+// WebSocket declared in web_server.cpp
+extern AsyncWebSocket ws;
+
+// ===== LOGGING GLOBALS =====
+String logBuffer[64];
+int logBufferIndex = 0;
+bool logBufferFull = false;
+
+// Centralized logging: prints to Serial, stores in circular buffer and
+// broadcasts to connected WebSocket clients (if any).
+void logMessage(const String& message);
+void logPrintf(const char* fmt, ...);
+
 // ===== GLOBAL OBJECTS =====
 AsyncWebServer server(80);
 // WiFiClient and mqttClient are now defined in src/mqtt.cpp
@@ -62,8 +75,8 @@ bool checkTriplePress() {
   unsigned long lastPressTime = 0;
   bool lastState = HIGH;
   
-  Serial.println("\n⏱ WiFi Reset Check (5 seconds window)...");
-  Serial.println("Press button on GPIO39 three times to reset WiFi credentials");
+  logMessage("\n⏱ WiFi Reset Check (5 seconds window)...");
+  logMessage("Press button on GPIO39 three times to reset WiFi credentials");
   
   while (millis() - startTime < 5000) {  // 5 secondes
     bool currentState = digitalRead(RESET_WIFI_BUTTON);
@@ -72,10 +85,10 @@ bool checkTriplePress() {
     if (lastState == HIGH && currentState == LOW) {
       pressCount++;
       lastPressTime = millis();
-      Serial.printf("✓ Press %d/3 detected\n", pressCount);
+      logPrintf("✓ Press %d/3 detected", pressCount);
       
       if (pressCount >= 3) {
-        Serial.println("\n🔥 Triple press detected!");
+        logMessage("\n🔥 Triple press detected!");
         return true;
       }
       
@@ -87,9 +100,9 @@ bool checkTriplePress() {
   }
   
   if (pressCount > 0) {
-    Serial.printf("Only %d press(es) detected. Reset cancelled.\n", pressCount);
+    logPrintf("Only %d press(es) detected. Reset cancelled.", pressCount);
   }
-  Serial.println("No reset requested. Continuing...\n");
+  logMessage("No reset requested. Continuing...\n");
   return false;
 }
 
@@ -97,31 +110,26 @@ bool checkTriplePress() {
 void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
-      Serial.println("ETH Started");
+      logMessage("ETH Started");
       ETH.setHostname(config.deviceName);
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
-      Serial.println("ETH Connected");
+      logMessage("ETH Connected");
       break;
-    case ARDUINO_EVENT_ETH_GOT_IP:
-      Serial.print("ETH MAC: ");
-      Serial.print(ETH.macAddress());
-      Serial.print(", IPv4: ");
-      Serial.print(ETH.localIP());
-      if (ETH.fullDuplex()) {
-        Serial.print(", FULL_DUPLEX");
-      }
-      Serial.print(", ");
-      Serial.print(ETH.linkSpeed());
-      Serial.println("Mbps");
+    case ARDUINO_EVENT_ETH_GOT_IP: {
+      String s = "ETH MAC: " + ETH.macAddress() + ", IPv4: " + ETH.localIP().toString();
+      if (ETH.fullDuplex()) s += ", FULL_DUPLEX";
+      s += ", " + String(ETH.linkSpeed()) + "Mbps";
+      logMessage(s);
       ethConnected = true;
       break;
+    }
     case ARDUINO_EVENT_ETH_DISCONNECTED:
-      Serial.println("ETH Disconnected");
+      logMessage("ETH Disconnected");
       ethConnected = false;
       break;
     case ARDUINO_EVENT_ETH_STOP:
-      Serial.println("ETH Stopped");
+      logMessage("ETH Stopped");
       ethConnected = false;
       break;
     default:
@@ -131,10 +139,10 @@ void WiFiEvent(WiFiEvent_t event) {
 
 // ===== ETHERNET INITIALIZATION =====
 bool initEthernet() {
-  Serial.println("\n=== Initializing Ethernet ===");
+  logMessage("\n=== Initializing Ethernet ===");
   
   if (strcmp(config.ethernetType, "WT32-ETH01") == 0) {
-    Serial.println("Board: WT32-ETH01");
+    logMessage("Board: WT32-ETH01");
     
     WiFi.onEvent(WiFiEvent);
     
@@ -160,24 +168,24 @@ bool initEthernet() {
       subnet.fromString(config.staticSubnet);
       
       if (!ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE)) {
-        Serial.println("ETH start failed");
+        logMessage("ETH start failed");
         return false;
       }
       
       if (!ETH.config(localIP, gateway, subnet, dns1)) {
-        Serial.println("ETH config failed");
+        logMessage("ETH config failed");
         return false;
       }
     } else {
       if (!ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER, ETH_PHY_MDC, ETH_PHY_MDIO, ETH_PHY_TYPE, ETH_CLK_MODE)) {
-        Serial.println("ETH start failed");
+        logMessage("ETH start failed");
         return false;
       }
     }
     
     // Wait for connection with improved feedback
     unsigned long startAttemptTime = millis();
-    Serial.print("Waiting for Ethernet connection");
+    logMessage("Waiting for Ethernet connection");
     while (!ethConnected && millis() - startAttemptTime < 15000) {
       delay(500);
       Serial.print(".");
@@ -186,20 +194,18 @@ bool initEthernet() {
     Serial.println();
     
     if (ethConnected) {
-      Serial.println("✓✓✓ ETHERNET CONNECTED ✓✓✓");
-      Serial.print("IP Address: ");
-      Serial.println(ETH.localIP());
-      Serial.print("Gateway: ");
-      Serial.println(ETH.gatewayIP());
+      logMessage("✓✓✓ ETHERNET CONNECTED ✓✓✓");
+      logMessage("IP Address: " + ETH.localIP().toString());
+      logMessage("Gateway: " + ETH.gatewayIP().toString());
       return true;
     } else {
-      Serial.println("✗ Ethernet connection timeout (no link detected)");
-      Serial.println("Check: Cable connection, router port, PHY power");
+      logMessage("✗ Ethernet connection timeout (no link detected)");
+      logMessage("Check: Cable connection, router port, PHY power");
       return false;
     }
   }
   
-  Serial.println("✗ Unknown Ethernet type");
+  logMessage("✗ Unknown Ethernet type");
   return false;
 }
 
@@ -214,10 +220,10 @@ void setup() {
     scheduledCommands[i].active = false;
   }
 
-  Serial.println("\n\n=== ESP32 Generic IO Controller ===");
-  Serial.println("Version 1.0 - WT32-ETH01");
-  Serial.println("Chip ID: " + String((uint32_t)ESP.getEfuseMac(), HEX));
-  Serial.println("SDK Version: " + String(ESP.getSdkVersion()));
+  logMessage("\n\n=== ESP32 Generic IO Controller ===");
+  logMessage("Version 1.0 - WT32-ETH01");
+  logMessage(String("Chip ID: ") + String((uint32_t)ESP.getEfuseMac(), HEX));
+  logMessage(String("SDK Version: ") + String(ESP.getSdkVersion()));
 
   pinMode(STATUS_LED, OUTPUT);
   blinkStatusLED(3, 200);
@@ -227,15 +233,15 @@ void setup() {
   
   // Check WiFi connection failure counter
   int wifiFailCount = preferences.getInt("wifiFailCount", 0);
-  Serial.printf("WiFi failure count: %d/3\n", wifiFailCount);
+  logPrintf("WiFi failure count: %d/3", wifiFailCount);
   
   if (wifiFailCount >= 3) {
-    Serial.println("\n⚠️⚠️⚠️ TOO MANY WiFi FAILURES ⚠️⚠️⚠️");
-    Serial.println("Resetting WiFi credentials...");
+    logMessage("\n⚠️⚠️⚠️ TOO MANY WiFi FAILURES ⚠️⚠️⚠️");
+    logMessage("Resetting WiFi credentials...");
     wifiManager.resetSettings();
     preferences.putInt("wifiFailCount", 0);
     delay(2000);
-    Serial.println("WiFi reset complete. Restarting...");
+    logMessage("WiFi reset complete. Restarting...");
     ESP.restart();
   }
   
@@ -248,40 +254,40 @@ void setup() {
   if (!config.initialized) {
     config.initialized = true;
     saveConfig();
-    Serial.println("First boot detected - Configuration initialized");
+    logMessage("First boot detected - Configuration initialized");
   }
   
   loadIOs();
-  Serial.println("Configuration and I/O settings loaded.");
+  logMessage("Configuration and I/O settings loaded.");
   blinkStatusLED(2, 100);
   // Apply I/O pin configurations
   applyIOPinModes();
-  Serial.println("I/O pin configurations applied.");
+  logMessage("I/O pin configurations applied.");
   blinkStatusLED(2, 100);
 
   // Initialize Serial Bridge
   serialManager.begin();
   if (config.useSerialBridge) {
-    Serial.println("Serial Bridge is enabled.");
+    logMessage("Serial Bridge is enabled.");
   } else {
-    Serial.println("Serial Bridge is disabled.");
+    logMessage("Serial Bridge is disabled.");
   }
 
   // ===== NETWORK INITIALIZATION =====
   bool networkConnected = false;
   
   // TOUJOURS essayer Ethernet en premier sur WT32-ETH01
-  Serial.println("\n🌐 Attempting Ethernet connection (WT32-ETH01)...");
+  logMessage("\n🌐 Attempting Ethernet connection (WT32-ETH01)...");
   
   if (initEthernet()) {
     // Ethernet OK
     networkConnected = true;
     config.useEthernet = true;
     digitalWrite(STATUS_LED, LOW);
-    Serial.println("✓ Using Ethernet as primary network");
+    logMessage("✓ Using Ethernet as primary network");
   } else {
     // Ethernet FAILED - Basculer vers WiFi
-    Serial.println("⚠️ Ethernet failed, switching to WiFi fallback");
+    logMessage("⚠️ Ethernet failed, switching to WiFi fallback");
     
     config.useEthernet = false;
     
@@ -291,11 +297,11 @@ void setup() {
     
     // Check for WiFi reset (triple press) - seulement en mode WiFi fallback
     if (checkTriplePress()) {
-      Serial.println("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
+      logMessage("\n⚠⚠⚠ RESETTING WiFi credentials ⚠⚠⚠");
       wifiManager.resetSettings();
       preferences.putInt("wifiFailCount", 0);
       delay(1000);
-      Serial.println("Credentials erased. Restarting...");
+      logMessage("Credentials erased. Restarting...");
       delay(2000);
       ESP.restart();
     }
@@ -307,11 +313,11 @@ void setup() {
     wifiManager.setDebugOutput(true);         // Activer le debug
     
     // Tentative de connexion WiFi
-    Serial.println("\n⏱ Starting WiFi configuration...");
-    Serial.println("If no saved credentials, access point will start:");
-    Serial.println("SSID: ESP32-Roller-Setup");
-    Serial.println("No password required");
-    Serial.println("Connect and configure WiFi at: http://192.168.4.1\n");
+    logMessage("\n⏱ Starting WiFi configuration...");
+    logMessage("If no saved credentials, access point will start:");
+    logMessage("SSID: ESP32-Roller-Setup");
+    logMessage("No password required");
+    logMessage("Connect and configure WiFi at: http://192.168.4.1\n");
     
     // Configuration WiFi pour compatibilité Freebox (juste avant autoConnect)
    // WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Réduire la puissance pour éviter les timeouts
@@ -324,10 +330,9 @@ void setup() {
       gateway.fromString(config.staticGateway);
       subnet.fromString(config.staticSubnet);
       if (WiFi.config(localIP, gateway, subnet, dns1) == false) {
-        Serial.println("⚠️ Static IP Configuration Failed");
+        logMessage("⚠️ Static IP Configuration Failed");
       } else {
-        Serial.print("✓ Static IP configured: ");
-        Serial.println(localIP);
+        logMessage(String("✓ Static IP configured: ") + localIP.toString());
       }
     }
     
@@ -335,15 +340,15 @@ void setup() {
     blinkStatusLED(5, 100);
     
     if (!wifiManager.autoConnect((String(config.deviceName) + "-Setup").c_str())) {
-      Serial.println("\n✗✗✗ WiFiManager failed to connect ✗✗✗");
+      logMessage("\n✗✗✗ WiFiManager failed to connect ✗✗✗");
       
       // Incrémenter le compteur d'échecs
       int failCount = preferences.getInt("wifiFailCount", 0);
       failCount++;
       preferences.putInt("wifiFailCount", failCount);
-      Serial.printf("WiFi failure count incremented to: %d/3\n", failCount);
+      logPrintf("WiFi failure count incremented to: %d/3", failCount);
       
-      Serial.println("Restarting in 5 seconds...");
+      logMessage("Restarting in 5 seconds...");
       
       // Clignoter rapidement la LED pour indiquer l'échec
       blinkStatusLED(10, 250);
@@ -354,21 +359,17 @@ void setup() {
     // Connexion réussie - réinitialiser le compteur d'échecs
     preferences.putInt("wifiFailCount", 0);
     blinkStatusLED(3, 100);  // Signal de succès
-    Serial.println("\n✓✓✓ WiFi CONNECTED ✓✓✓");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
+    logMessage("\n✓✓✓ WiFi CONNECTED ✓✓✓");
+    logMessage(String("IP Address: ") + WiFi.localIP().toString());
     
     // === OPTIMISATION LATENCE ===
     // Désactiver le mode économie d'énergie du WiFi pour réduire la latence du ping
     WiFi.setSleep(false);
-    Serial.println("✓ WiFi power-saving mode disabled to reduce latency.");
+    logMessage("✓ WiFi power-saving mode disabled to reduce latency.");
     // ==========================
 
-    Serial.print("Gateway: ");
-    Serial.println(WiFi.gatewayIP());
-    Serial.print("RSSI: ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
+    logMessage(String("Gateway: ") + WiFi.gatewayIP().toString());
+    logPrintf("RSSI: %d dBm", WiFi.RSSI());
     digitalWrite(STATUS_LED, LOW);
     networkConnected = true;
   }
@@ -377,15 +378,15 @@ void setup() {
   if (!config.useEthernet) {
     wifiManager.stopConfigPortal();
     delay(500);  // Attendre la libération du port
-    Serial.println("✓ Config portal stopped to free port 80");
+    logMessage("✓ Config portal stopped to free port 80");
   }
 
   // Initialize SPIFFS AVANT de configurer le serveur web
   if(!SPIFFS.begin(true)){
-    Serial.println("An Error has occurred while mounting SPIFFS");
+    logMessage("An Error has occurred while mounting SPIFFS");
     return;
   }
-  Serial.println("SPIFFS mounted successfully.");
+  logMessage("SPIFFS mounted successfully.");
 
   // Setup Web Server (configure toutes les routes)
   setupWebServer();
@@ -393,7 +394,7 @@ void setup() {
   // Setup MQTT
   setupMQTT();
   if (strlen(config.mqttServer) > 0) {
-    Serial.println("MQTT configuration found, enabling MQTT.");
+    logMessage("MQTT configuration found, enabling MQTT.");
     mqttEnabled = true;
     blinkStatusLED(2, 100);  // Signal MQTT activé
   }
@@ -411,12 +412,11 @@ void setup() {
   // Démarrage du serveur web (UNE SEULE FOIS, après avoir configuré toutes les routes)
   server.begin();
   String ipAddress = config.useEthernet ? ETH.localIP().toString() : WiFi.localIP().toString();
-  Serial.println("✓ Web server started");
-  Serial.println("\n========================================");
-  Serial.println("Access the web interface at:");
-  Serial.print("http://");
-  Serial.println(ipAddress);
-  Serial.println("========================================\n");
+  logMessage("✓ Web server started");
+  logMessage("\n========================================");
+  logMessage("Access the web interface at:");
+  logMessage(String("http://") + ipAddress);
+  logMessage("========================================\n");
   
   blinkStatusLED(1, 500);  // Signal de démarrage complet
 }
@@ -482,7 +482,7 @@ void processScheduledCommands() {
         
         // Afficher le délai en millisecondes avec 3 décimales
         double delay_ms = delay_us / 1000.0;
-        Serial.printf("⏰ Scheduled command executed (delay: %.3f ms)\n", delay_ms);
+        logPrintf("⏰ Scheduled command executed (delay: %.3f ms)", delay_ms);
       }
     }
   }
@@ -524,7 +524,7 @@ void loadConfig() {
   config.serialBaudRate = preferences.getLong("serBaud", 9600);
 
   config.initialized = preferences.getBool("init", false);
-  Serial.println("Configuration loaded.");
+  logMessage("Configuration loaded.");
 }
 
 void saveConfig() {
@@ -552,7 +552,7 @@ void saveConfig() {
   preferences.putLong("serBaud", config.serialBaudRate);
 
   preferences.putBool("init", true);
-  Serial.println("Configuration saved.");
+  logMessage("Configuration saved.");
 }
 
 void loadIOs() {
@@ -562,7 +562,7 @@ void loadIOs() {
     String key = "io" + String(i);
     preferences.getBytes(key.c_str(), &ioPins[i], sizeof(IOPin));
   }
-  Serial.printf("Loaded %d I/O pin configurations.\n", ioPinCount);
+  logPrintf("Loaded %d I/O pin configurations.", ioPinCount);
 }
 
 void saveIOs() {
@@ -571,7 +571,7 @@ void saveIOs() {
     String key = "io" + String(i);
     preferences.putBytes(key.c_str(), &ioPins[i], sizeof(IOPin));
   }
-  Serial.printf("Saved %d I/O pin configurations.\n", ioPinCount);
+  logPrintf("Saved %d I/O pin configurations.", ioPinCount);
 }
 
 void applyIOPinModes() {
@@ -583,34 +583,34 @@ void applyIOPinModes() {
             switch (ioPins[i].inputType) {
                 case 0:
                     pinMode(ioPins[i].pin, INPUT);
-                    Serial.printf("Pin %d (%s) configured as INPUT\n", ioPins[i].pin, ioPins[i].name);
+                    logPrintf("Pin %d (%s) configured as INPUT", ioPins[i].pin, ioPins[i].name);
                     break;
                 case 1:
                     pinMode(ioPins[i].pin, INPUT_PULLUP);
-                    Serial.printf("Pin %d (%s) configured as INPUT_PULLUP\n", ioPins[i].pin, ioPins[i].name);
+                    logPrintf("Pin %d (%s) configured as INPUT_PULLUP", ioPins[i].pin, ioPins[i].name);
                     break;
                 case 2:
                     pinMode(ioPins[i].pin, INPUT_PULLDOWN);
-                    Serial.printf("Pin %d (%s) configured as INPUT_PULLDOWN\n", ioPins[i].pin, ioPins[i].name);
+                    logPrintf("Pin %d (%s) configured as INPUT_PULLDOWN", ioPins[i].pin, ioPins[i].name);
                     break;
                 default:
                     pinMode(ioPins[i].pin, INPUT_PULLUP); // Default fallback
-                    Serial.printf("Pin %d (%s) configured as INPUT_PULLUP (default)\n", ioPins[i].pin, ioPins[i].name);
+                    logPrintf("Pin %d (%s) configured as INPUT_PULLUP (default)", ioPins[i].pin, ioPins[i].name);
                     break;
             }
         } else if (ioPins[i].mode == 2) { // OUTPUT
             pinMode(ioPins[i].pin, OUTPUT);
             digitalWrite(ioPins[i].pin, ioPins[i].defaultState);
-            Serial.printf("Pin %d (%s) configured as OUTPUT\n", ioPins[i].pin, ioPins[i].name);
+            logPrintf("Pin %d (%s) configured as OUTPUT", ioPins[i].pin, ioPins[i].name);
         }
     }
-    Serial.println("I/O pin modes applied.");
+    logMessage("I/O pin modes applied.");
 }
 
 
 // ===== I/O HANDLING (FreeRTOS Task) =====
 void handleIOs(void *pvParameters) {
-  Serial.println("✅ I/O handling task started.");
+  logMessage("✅ I/O handling task started.");
 
   for (;;) { // Infinite loop for the task
     for (int i = 0; i < ioPinCount; i++) {
@@ -620,7 +620,7 @@ void handleIOs(void *pvParameters) {
         // Détection immédiate du changement d'état (sans debounce)
         if (currentState != ioPins[i].state) {
           ioPins[i].state = currentState;
-          Serial.printf("Input '%s' (pin %d) changed to %s\n", ioPins[i].name, ioPins[i].pin, currentState ? "HIGH" : "LOW");
+          logPrintf("Input '%s' (pin %d) changed to %s", ioPins[i].name, ioPins[i].pin, currentState ? "HIGH" : "LOW");
           
           char topic[128];
           snprintf(topic, sizeof(topic), "%s/status/%s", config.deviceName, ioPins[i].name);
@@ -649,4 +649,39 @@ void blinkStatusLED(int times, int delayMs) {
     digitalWrite(STATUS_LED, LOW);
     delay(delayMs);
   }
+}
+
+
+// ===== CENTRAL LOGGING IMPLEMENTATION =====
+void logMessage(const String& message) {
+  // Print to serial
+  Serial.println(message);
+
+  // Store in circular buffer
+  logBuffer[logBufferIndex] = message;
+  logBufferIndex++;
+  if (logBufferIndex >= (int)(sizeof(logBuffer) / sizeof(logBuffer[0]))) {
+    logBufferIndex = 0;
+    logBufferFull = true;
+  }
+
+  // Broadcast via WebSocket if available
+  // Compose a small JSON payload {type: "sys_log", message: "..."}
+  if (&ws != nullptr && ws.count() > 0) {
+    DynamicJsonDocument doc(256);
+    doc["type"] = "sys_log";
+    doc["message"] = message;
+    char out[256];
+    size_t n = serializeJson(doc, out, sizeof(out));
+    ws.textAll(out, n);
+  }
+}
+
+void logPrintf(const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  logMessage(String(buf));
 }

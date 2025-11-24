@@ -1,11 +1,14 @@
 #include "serial_manager.h"
 #include "config.h"
 #include "mqtt.h"
+#include <ESPAsyncWebServer.h>
 #include <time.h>
 #include <ArduinoJson.h>
 
 extern Config config;
 extern bool mqttEnabled;
+extern void logMessage(const String& message);
+extern void logPrintf(const char* fmt, ...);
 
 SerialManager serialManager;
 
@@ -20,7 +23,7 @@ void SerialManager::begin() {
         long baud = config.serialBaudRate > 0 ? config.serialBaudRate : 9600;
 
         _serial->begin(baud, SERIAL_8N1, rxPin, txPin);
-        Serial.printf("Serial Bridge started on RX:%d, TX:%d at %ld baud\n", rxPin, txPin, baud);
+        logPrintf("Serial Bridge started on RX:%d, TX:%d at %ld baud", rxPin, txPin, baud);
     }
 }
 
@@ -33,7 +36,7 @@ void SerialManager::loop() {
 
         if (msg.length() > 0) {
             addLog("RX", msg);
-            Serial.println("Serial Bridge RX: " + msg);
+            logMessage("Serial Bridge RX: " + msg);
             publish(msg);
         }
     }
@@ -44,7 +47,7 @@ void SerialManager::send(String message) {
 
     _serial->println(message);
     addLog("TX", message);
-    Serial.println("Serial Bridge TX: " + message);
+    logMessage("Serial Bridge TX: " + message);
 }
 
 void SerialManager::publish(String message) {
@@ -69,10 +72,10 @@ void SerialManager::publish(String message) {
         char payload[256];
         serializeJson(doc, payload);
         
-        Serial.printf("Publishing serial RX to topic [%s]: %s\n", topic, payload);
+        logPrintf("Publishing serial RX to topic [%s]: %s", topic, payload);
         publishMQTT(topic, payload);
     } else {
-        Serial.println("MQTT not connected or disabled - serial message not published");
+        logMessage("MQTT not connected or disabled - serial message not published");
     }
 }
 
@@ -95,6 +98,19 @@ void SerialManager::addLog(String direction, String message) {
     // Keep only last 50 logs
     if (_logs.size() > 50) {
         _logs.erase(_logs.begin());
+    }
+
+    // Also stream the new log to any connected WebSocket clients (real-time)
+    extern AsyncWebSocket ws; // declared in web_server.cpp
+    DynamicJsonDocument doc(256);
+    doc["type"] = "serial_log";
+    doc["timestamp"] = log.timestamp;
+    doc["direction"] = log.direction;
+    doc["message"] = log.message;
+    char buf[256];
+    size_t n = serializeJson(doc, buf);
+    if (ws.count() > 0) {
+        ws.textAll(buf, n);
     }
 }
 

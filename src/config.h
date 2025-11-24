@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 #define MAX_IOS 20
+#define MAX_LOG_LINES 64
 
 
 // ===== CONFIGURATION PINS =====

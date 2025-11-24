@@ -14,6 +14,9 @@ PubSubClient mqttClient(wifiClient);
 // MQTT active flag (default disabled so web server can be debugged first)
 bool mqttEnabled = false;
 
+extern void logMessage(const String& message);
+extern void logPrintf(const char* fmt, ...);
+
 // Variables pour synchronisation temporelle précise
 static uint32_t lastSyncSeconds = 0;
 static uint32_t lastSyncMicros = 0;  // micros() au moment de la sync
@@ -92,7 +95,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     memcpy(message, payload, length);
     message[length] = '\0';
 
-    Serial.printf("[%s] MQTT message arrived on topic [%s]: %s\n", getFormattedTime().c_str(), topic, message);
+    logPrintf("[%s] MQTT message arrived on topic [%s]: %s", getFormattedTime().c_str(), topic, message);
 
     // Handle time synchronization first, as it's a critical service
     // Le topic de temps est commun à tous les appareils
@@ -137,17 +140,17 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
             
             // Affichage simplifié
             if (syncStats.sync_count <= 2) {
-                Serial.printf("⏰ Time sync #%u: %u.%06u (initializing)\n", 
+                logPrintf("⏰ Time sync #%u: %u.%06u (initializing)", 
                              syncStats.sync_count, tv.tv_sec, tv.tv_usec);
             } else {
-                Serial.printf("⏰ Time sync #%u: %u.%06u", 
+                logPrintf("⏰ Time sync #%u: %u.%06u", 
                              syncStats.sync_count, tv.tv_sec, tv.tv_usec);
                 
                 if (syncStats.estimated_latency_us > 0) {
-                    Serial.printf(" | Comp: +%.2f ms", 
+                    logPrintf(" | Comp: +%.2f ms", 
                                  syncStats.estimated_latency_us / 1000.0f);
                 }
-                Serial.println();
+                logMessage("");
             }
             
         } else {
@@ -158,7 +161,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
                 tv.tv_sec = unix_time;
                 tv.tv_usec = 0;
                 settimeofday(&tv, NULL);
-                Serial.printf("Time synchronized: %lu (legacy mode)\n", unix_time);
+                logPrintf("Time synchronized: %lu (legacy mode)", unix_time);
             }
         }
         return;
@@ -187,11 +190,11 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
             memcpy(message, payload, length);
             message[length] = '\0';
             
-            Serial.printf("MQTT to Serial command received: %s\n", message);
+            logPrintf("MQTT to Serial command received: %s", message);
             serialManager.send(String(message));
         } else {
             // This case should not happen if not subscribed, but as a safeguard:
-            Serial.println("-> WARNING: Received serial message but bridge is disabled.");
+            logMessage("-> WARNING: Received serial message but bridge is disabled.");
         }
         return;
     }
@@ -213,8 +216,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
                 DeserializationError error = deserializeJson(doc, payload, length);
 
                 if (error) {
-                    Serial.print(F("deserializeJson() failed: "));
-                    Serial.println(error.c_str());
+                    logMessage(String("deserializeJson() failed: ") + error.c_str());
                     // Fallback for simple "0" or "1" commands
                     int state = atoi(message);
                     executeCommand(ioPins[i].pin, state);
@@ -236,12 +238,12 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
                             scheduledCommands[j].exec_at_us = exec_at_us;
                             scheduledCommands[j].active = true;
                             scheduled = true;
-                            Serial.printf("⏰ Command for pin %d scheduled at %u.%06u\n", ioPins[i].pin, exec_at_sec, exec_at_us);
+                            logPrintf("⏰ Command for pin %d scheduled at %u.%06u", ioPins[i].pin, exec_at_sec, exec_at_us);
                             break;
                         }
                     }
                     if (!scheduled) {
-                        Serial.println("⚠️ Scheduled command queue is full!");
+                        logMessage("⚠️ Scheduled command queue is full!");
                     }
                 } else {
                     // Execute immediately
@@ -249,31 +251,31 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
                 }
 
             } else {
-                Serial.printf("Received command for non-output pin '%s'\n", pinName.c_str());
+                    logPrintf("Received command for non-output pin '%s'", pinName.c_str());
             }
             return; // Command handled for this pin
         }
     }
 
-    Serial.printf("Received command for unknown pin '%s'\n", pinName.c_str());
+    logPrintf("Received command for unknown pin '%s'", pinName.c_str());
 }
 
 void setupMQTT() {
   mqttClient.setServer(config.mqttServer, config.mqttPort);
   mqttClient.setCallback(mqtt_callback);
-  Serial.println("MQTT setup.");
+    logMessage("MQTT setup.");
 }
 
 void reconnectMQTT() {
-  Serial.print("Attempting MQTT connection...");
+    logMessage("Attempting MQTT connection...");
   String clientId = "ESP32-IO-Controller-";
   clientId += String(random(0xffff), HEX);
   if (mqttClient.connect(clientId.c_str(), config.mqttUser, config.mqttPassword)) {
-    Serial.println("connected");
+    logMessage("connected");
     blinkStatusLED(2, 100);  // Signal de connexion MQTT réussie
-    Serial.println();
-    Serial.println("========================================");
-    Serial.println("✓ Client MQTT connecté au broker");
+    logMessage("");
+    logMessage("========================================");
+    logMessage("✓ Client MQTT connecté au broker");
     
     // Publish availability
     char availabilityTopic[128];
@@ -283,26 +285,26 @@ void reconnectMQTT() {
     // Subscribe to control topics
     String controlTopic = String(config.deviceName) + "/control/#";
     mqttClient.subscribe(controlTopic.c_str());
-    Serial.printf("✓ Abonné à: %s\n", controlTopic.c_str());
+    logPrintf("✓ Abonné à: %s", controlTopic.c_str());
 
     // Subscribe to time sync topic (commun à tous les ESP32)
     mqttClient.subscribe("esp32/time/sync");
-    Serial.printf("✓ Abonné à: esp32/time/sync\n");
+    logPrintf("✓ Abonné à: esp32/time/sync");
     
     // Subscribe to ping topic for latency measurement (géré par le PC)
     String pingTopic = String(config.deviceName) + "/ping";
     mqttClient.subscribe(pingTopic.c_str());
-    Serial.printf("✓ Abonné à: %s\n", pingTopic.c_str());
+    logPrintf("✓ Abonné à: %s", pingTopic.c_str());
 
     // Subscribe to serial bridge topic
     if (config.useSerialBridge) {
         String serialTopic = String(config.deviceName) + "/serial/send";
         mqttClient.subscribe(serialTopic.c_str());
-        Serial.printf("✓ Abonné à: %s\n", serialTopic.c_str());
+        logPrintf("✓ Abonné à: %s", serialTopic.c_str());
     }
     
-    Serial.println("========================================");
-    Serial.println();
+    logMessage("========================================");
+    logMessage("");
 
     // Publish current state of all pins as retained messages
     for (int i = 0; i < ioPinCount; i++) {
@@ -319,18 +321,16 @@ void reconnectMQTT() {
     }
 
   } else {
-    Serial.print("failed, rc=");
-    Serial.print(mqttClient.state());
-    Serial.println(" try again in 5 seconds");
+    logMessage(String("failed, rc=") + String(mqttClient.state()) + String(" try again in 5 seconds"));
   }
 }
 
 void publishMQTT(const char* topic, const char* payload, boolean retained) {
     if (mqttClient.connected()) {
         if (mqttClient.publish(topic, payload, retained)) {
-            Serial.printf("[%s] MQTT message published to [%s]: %s\n", getFormattedTime().c_str(), topic, payload);
+            logPrintf("[%s] MQTT message published to [%s]: %s", getFormattedTime().c_str(), topic, payload);
         } else {
-            Serial.printf("[%s] MQTT publish failed to [%s]\n", getFormattedTime().c_str(), topic);
+            logPrintf("[%s] MQTT publish failed to [%s]", getFormattedTime().c_str(), topic);
         }
     }
 }

@@ -15,9 +15,17 @@ extern int ioPinCount;
 extern bool mqttEnabled;
 extern bool ethConnected;
 
+extern void logMessage(const String& message);
+
 extern void saveConfig();
 extern void saveIOs();
 extern void applyIOPinModes();
+
+// WebSocket for real-time logs/events
+AsyncWebSocket ws("/ws");
+
+// Fallback server on 8080 in case port 80 bind fails
+static AsyncWebServer server8080(8080);
 
 void setupWebServer() {
   // Servir le fichier index.html depuis SPIFFS
@@ -279,6 +287,50 @@ void setupWebServer() {
   // ElegantOTA pour les mises à jour
   ElegantOTA.begin(&server);
   
+  // Attach WebSocket to both servers so clients can connect whether port 80
+  // succeeded or not.
+  server.addHandler(&ws);
+  server8080.addHandler(&ws);
+
+  // WebSocket event handling. On connect we send an initial small message
+  // so the client knows the socket is ready. Real-time logs will be pushed
+  // from code that generates them (see notes below).
+  ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len){
+    if (type == WS_EVT_CONNECT) {
+      server->text(client->id(), "{\"type\":\"ws_connected\",\"message\":\"ws ready\"}");
+    }
+  });
+
   server.begin();
-  Serial.println("Web server started with new architecture.");
+  logMessage("Web server started with new architecture.");
+
+  // Start fallback server on 8080 as a lightweight mirror of the main routes.
+  // This helps when port 80 is occupied by another service (bind error).
+  server8080.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html", "text/html");
+  });
+  server8080.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
+    JsonDocument doc;
+    doc["deviceName"] = config.deviceName;
+    doc["useEthernet"] = config.useEthernet;
+    if (config.useEthernet) {
+      doc["network"] = ethConnected;
+      doc["ip"] = ethConnected ? ETH.localIP().toString() : "Not connected";
+      doc["networkType"] = "Ethernet";
+    } else {
+      doc["network"] = WiFi.status() == WL_CONNECTED;
+      doc["ip"] = WiFi.localIP().toString();
+      doc["networkType"] = "WiFi";
+      doc["rssi"] = WiFi.RSSI();
+    }
+    doc["mqtt"] = mqttClient.connected();
+    time_t now; time(&now);
+    struct tm timeinfo; localtime_r(&now, &timeinfo);
+    char timeStr[20]; strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    doc["time"] = timeStr;
+    String response; serializeJson(doc, response);
+    request->send(200, "application/json", response);
+  });
+  server8080.begin();
+  logMessage("Fallback web server started on port 8080.");
 }
