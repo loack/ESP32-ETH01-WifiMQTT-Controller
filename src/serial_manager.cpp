@@ -102,7 +102,7 @@ void SerialManager::addLog(String direction, String message) {
 
     // Also stream the new log to any connected WebSocket clients (real-time)
     extern AsyncWebSocket ws; // declared in web_server.cpp
-    DynamicJsonDocument doc(256);
+    JsonDocument doc;
     doc["type"] = "serial_log";
     doc["timestamp"] = log.timestamp;
     doc["direction"] = log.direction;

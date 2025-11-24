@@ -488,18 +488,37 @@
         socket.onmessage = (evt) => {
             try {
                 const data = JSON.parse(evt.data);
-                if (data.type === 'serial_log') {
-                    const logsDiv = document.getElementById('serial-logs');
+                const logsDiv = document.getElementById('serial-logs');
+
+                // Handle serial logs and system logs uniformly
+                if (data.type === 'serial_log' || data.type === 'sys_log') {
                     const el = document.createElement('div');
                     el.style.borderBottom = '1px solid #eee';
                     el.style.padding = '5px 0';
-                    el.innerHTML = `<span style="color:#999; font-size:12px;">[${data.timestamp}]</span> <strong style="margin:0 6px; color:#3498db;">${data.direction}</strong> ${data.message}`;
+
+                    if (data.type === 'serial_log') {
+                        const color = data.direction === 'TX' ? '#2ecc71' : '#3498db';
+                        const icon = data.direction === 'TX' ? '⬆️' : '⬇️';
+                        el.innerHTML = `<span style="color:#999; font-size:12px;">[${data.timestamp}]</span> <span style="color: ${color}; font-weight: bold; margin: 0 5px;">${icon} ${data.direction}</span> <span>${data.message}</span>`;
+                    } else { // sys_log
+                        el.innerHTML = `<span style="color:#999; font-size:12px;">[${data.timestamp || ''}]</span> <span style="color:#7f8c8d; font-weight: bold; margin: 0 5px;">SYS</span> <span>${data.message}</span>`;
+                    }
+
                     // insert at top
+                    if (logsDiv.firstChild) logsDiv.insertBefore(el, logsDiv.firstChild);
+                    else logsDiv.appendChild(el);
+                } else if (data.type === 'ws_connected') {
+                    // Optional: show a small notice that WS is ready
+                    const el = document.createElement('div');
+                    el.style.color = '#999';
+                    el.style.fontSize = '12px';
+                    el.textContent = `[WS] ${data.message || 'connected'}`;
+                    const logsDiv = document.getElementById('serial-logs');
                     if (logsDiv.firstChild) logsDiv.insertBefore(el, logsDiv.firstChild);
                     else logsDiv.appendChild(el);
                 }
             } catch (e) {
-                // Not JSON — could be server welcome; append raw
+                // Not JSON — append raw
                 const logsDiv = document.getElementById('serial-logs');
                 const el = document.createElement('div');
                 el.textContent = evt.data;

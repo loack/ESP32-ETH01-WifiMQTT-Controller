@@ -665,16 +665,26 @@ void logMessage(const String& message) {
     logBufferFull = true;
   }
 
-  // Broadcast via WebSocket if available
-  // Compose a small JSON payload {type: "sys_log", message: "..."}
-  if (&ws != nullptr && ws.count() > 0) {
-    DynamicJsonDocument doc(256);
-    doc["type"] = "sys_log";
-    doc["message"] = message;
-    char out[256];
-    size_t n = serializeJson(doc, out, sizeof(out));
-    ws.textAll(out, n);
-  }
+    // Broadcast via WebSocket if available
+    // Compose a small JSON payload {type: "sys_log", timestamp: "HH:MM:SS", message: "..."}
+    if (ws.count() > 0) {
+      JsonDocument doc;
+      doc["type"] = "sys_log";
+
+      // add a timestamp so UI can display it
+      time_t now;
+      time(&now);
+      struct tm timeinfo;
+      localtime_r(&now, &timeinfo);
+      char timeStr[20];
+      strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
+      doc["timestamp"] = timeStr;
+
+      doc["message"] = message;
+      char out[256];
+      size_t n = serializeJson(doc, out, sizeof(out));
+      ws.textAll(out, n);
+    }
 }
 
 void logPrintf(const char* fmt, ...) {
