@@ -80,7 +80,6 @@
             <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
                 <p style="color: #999;">Chargement des logs...</p>
             </div>
-            <button class="btn btn-primary btn-small" style="margin-top: 10px;" onclick="loadLogs()">Rafraîchir</button>
         </div>
         <!-- TAB CONFIG I/O -->
         <div id="ios" class="tab-content">
@@ -181,11 +180,10 @@
                         <button class="btn btn-primary" onclick="sendSerialMessage()">Envoyer</button>
                     </div>
                 </div>
-                <h3 style="margin-top: 20px;">Logs Série</h3>
+                <h3 style="margin-top: 20px;">Logs</h3>
                 <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
                     <p style="color: #999;">Chargement des logs...</p>
                 </div>
-                <button class="btn btn-primary btn-small" style="margin-top: 10px;" onclick="loadSerialLogs()">Rafraîchir</button>
             </div>
 
             <div class="card" style="margin-top: 20px;">
@@ -220,7 +218,7 @@
         if (tabName === 'status') loadStatus();
         if (tabName === 'ios') loadIOs();
         if (tabName === 'config' || tabName === 'network') loadConfig();
-        if (tabName === 'serial') loadSerialLogs();
+        // Serial logs are delivered in real-time via WebSocket; no initial HTTP load required.
     }
 
     function toggleStaticFields() {
@@ -429,29 +427,7 @@
             });
     }
 
-    function loadSerialLogs() {
-        fetch('/api/serial/logs').then(r => r.json()).then(data => {
-            const logsDiv = document.getElementById('serial-logs');
-            logsDiv.innerHTML = '';
-            if (data.length === 0) {
-                logsDiv.innerHTML = '<p style="color: #999;">Aucun log disponible.</p>';
-                return;
-            }
-            
-            // Afficher les logs du plus récent au plus ancien (ou inversement selon préférence)
-            // Ici on affiche tel quel (l'ordre dépend du backend, supposons chronologique)
-            // On va inverser pour avoir le plus récent en haut
-            data.reverse().forEach(log => {
-                const color = log.direction === 'TX' ? '#2ecc71' : '#3498db';
-                const icon = log.direction === 'TX' ? '⬆️' : '⬇️';
-                logsDiv.innerHTML += `<div style="border-bottom: 1px solid #eee; padding: 5px 0;">
-                    <span style="color: #999; font-size: 12px;">[${log.timestamp}]</span>
-                    <span style="color: ${color}; font-weight: bold; margin: 0 5px;">${icon} ${log.direction}</span>
-                    <span>${log.message}</span>
-                </div>`;
-            });
-        });
-    }
+    // Note: removed `loadSerialLogs()` HTTP polling function. Logs are streamed live via WebSocket.
 
     function sendSerialMessage() {
         const msg = document.getElementById('serial-message').value;
@@ -464,7 +440,7 @@
         }).then(r => r.json()).then(data => {
             if (data.success) {
                 document.getElementById('serial-message').value = '';
-                loadSerialLogs();
+                // realtime logs arrive via WebSocket; no explicit reload needed
             } else {
                 alert('Erreur: ' + data.message);
             }
@@ -483,7 +459,7 @@
             if (data.success) {
                 document.getElementById('serial-simulate-rx-message').value = '';
                 alert('Message de simulation RX publié sur MQTT.');
-                loadSerialLogs(); // Rafraîchir les logs pour voir le message simulé
+                // WebSocket will deliver the simulated log in real-time
             } else {
                 alert('Erreur: ' + data.message);
             }
