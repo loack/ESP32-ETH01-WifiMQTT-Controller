@@ -174,25 +174,20 @@
             <h2>Console Série (RS232/RS485)</h2>
             <div class="card">
                 <div class="form-group">
-                    <label>Envoyer un message</label>
+                    <label>Envoyer un message sur pin TX</label>
                     <div style="display: flex; gap: 10px;">
                         <input type="text" id="serial-message" placeholder="Message à envoyer...">
                         <button class="btn btn-primary" onclick="sendSerialMessage()">Envoyer</button>
                     </div>
                 </div>
-                <h3 style="margin-top: 20px;">Logs</h3>
-                <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
-                    <p style="color: #999;">Chargement des logs...</p>
-                </div>
             </div>
 
             <div class="card" style="margin-top: 20px;">
-                <h3>Simuler un message RX</h3>
                 <div class="form-group">
-                    <label>Simuler la réception d'un message sur le port série (publié sur MQTT)</label>
+                    <label>Simuler un message reçu sur pin RX (publié sur MQTT)</label>
                     <div style="display: flex; gap: 10px;">
                         <input type="text" id="serial-simulate-rx-message" placeholder="Message à simuler...">
-                        <button class="btn btn-primary" onclick="simulateSerialRx()">Simuler & Publier</button>
+                        <button class="btn btn-primary" onclick="simulateSerialRx()">Envoyer</button>
                     </div>
                 </div>
             </div>
