@@ -58,7 +58,7 @@ def get_local_ip():
         return ip
     except:
         return "127.0.0.1"
-
+ 
 # ========== CLIENT MQTT ==========
 
 def on_connect(client, userdata, flags, reason_code, properties):

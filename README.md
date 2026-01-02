@@ -405,3 +405,4 @@ Ce projet est dérivé de ESP32-WifiMQTTRelay et adapté pour WT32-ETH01.
 
 # si 192.168.1.220 est directement joignable sur enp1s0
 sudo ip route add 192.168.1.220/32 dev enp1s0
+sudo ip route add 192.168.1.180/32 dev enp1s0
