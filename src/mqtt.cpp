@@ -164,6 +164,27 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
                 logPrintf("Time synchronized: %lu (legacy mode)", unix_time);
             }
         }
+        // Publier l'état de toutes les E/S immédiatement après la synchronisation
+        struct timeval current_tv;
+        gettimeofday(&current_tv, NULL);
+
+            for (int i = 0; i < ioPinCount; i++) {
+                JsonDocument stateDoc;
+                // Utiliser 1/0 pour l'état (format unifié)
+                stateDoc["state"] = ioPins[i].state ? 1 : 0;
+                
+                // Utiliser le timestamp synchronisé
+                stateDoc["timestamp"] = (uint32_t)current_tv.tv_sec;
+                stateDoc["us"] = (uint32_t)current_tv.tv_usec;
+
+                char statePayload[128];
+                serializeJson(stateDoc, statePayload);
+
+                char stateTopic[128];
+                snprintf(stateTopic, sizeof(stateTopic), "%s/status/%s", config.deviceName, ioPins[i].name);
+                 // On ne met pas retained=true ici car c'est une mise à jour périodique/événementielle
+                publishMQTT(stateTopic, statePayload);
+            }
         return;
     }
     
@@ -307,10 +328,14 @@ void reconnectMQTT() {
     logMessage("");
 
     // Publish current state of all pins as retained messages
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
     for (int i = 0; i < ioPinCount; i++) {
         JsonDocument doc;
-        doc["state"] = ioPins[i].state ? "ON" : "OFF";
-        doc["timestamp"] = time(nullptr);
+        doc["state"] = ioPins[i].state ? 1 : 0;
+        doc["timestamp"] = (uint32_t)tv.tv_sec;
+        doc["us"] = (uint32_t)tv.tv_usec;
 
         char jsonBuffer[128];
         serializeJson(doc, jsonBuffer);

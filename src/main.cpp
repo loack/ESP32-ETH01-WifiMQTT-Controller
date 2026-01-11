@@ -260,18 +260,19 @@ void setup() {
   loadIOs();
   logMessage("Configuration and I/O settings loaded.");
   blinkStatusLED(2, 100);
-  // Apply I/O pin configurations
-  applyIOPinModes();
-  logMessage("I/O pin configurations applied.");
-  blinkStatusLED(2, 100);
 
-  // Initialize Serial Bridge
+  // Initialize Serial Bridge (BEFORE applying IO modes so IO modes can override)
   serialManager.begin();
   if (config.useSerialBridge) {
     logMessage("Serial Bridge is enabled.");
   } else {
     logMessage("Serial Bridge is disabled.");
   }
+
+  // Apply I/O pin configurations
+  applyIOPinModes();
+  logMessage("I/O pin configurations applied.");
+  blinkStatusLED(2, 100);
 
   // ===== NETWORK INITIALIZATION =====
   bool networkConnected = false;
@@ -624,8 +625,19 @@ void handleIOs(void *pvParameters) {
           
           char topic[128];
           snprintf(topic, sizeof(topic), "%s/status/%s", config.deviceName, ioPins[i].name);
-          char payload[2];
-          snprintf(payload, sizeof(payload), "%d", currentState ? 1 : 0);
+          
+          // Format JSON avec timestamp (comme pour les commandes)
+          struct timeval tv;
+          gettimeofday(&tv, NULL);
+          uint64_t timeUs = (uint64_t)tv.tv_sec * 1000000ULL + (uint64_t)tv.tv_usec;
+          
+          JsonDocument doc;
+          doc["state"] = currentState ? 1 : 0;
+          doc["timestamp"] = (uint32_t)(timeUs / 1000000ULL);
+          doc["us"] = (uint32_t)(timeUs % 1000000ULL);
+
+          char payload[128];
+          serializeJson(doc, payload);
 
           if (mqttEnabled && mqttClient.connected()) {
             publishMQTT(topic, payload);

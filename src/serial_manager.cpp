@@ -18,12 +18,16 @@ SerialManager::SerialManager() {
 
 void SerialManager::begin() {
     if (config.useSerialBridge) {
-        const int rxPin = 5;
-        const int txPin = 17;
+        // Use configured pins instead of hardcoded ones
+        const int rxPin = config.serialRxPin;
+        const int txPin = config.serialTxPin;
         long baud = config.serialBaudRate > 0 ? config.serialBaudRate : 9600;
 
         _serial->begin(baud, SERIAL_8N1, rxPin, txPin);
         logPrintf("Serial Bridge started on RX:%d, TX:%d at %ld baud", rxPin, txPin, baud);
+    } else {
+        _serial->end();
+        logMessage("Serial Bridge disabled, pins released");
     }
 }
 
