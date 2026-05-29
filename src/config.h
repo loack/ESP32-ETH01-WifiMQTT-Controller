@@ -7,9 +7,28 @@
 #define MAX_LOG_LINES 64
 
 
-// ===== CONFIGURATION PINS =====
-#define RELAY_K1        16
-#define RELAY_K2       17
+// ===== CONFIGURATION PINS — WT32-ETH01 =====
+// GPIO réservés par le LAN8720A (Ethernet RMII) — NE PAS UTILISER :
+//   IO0 (REF_CLK), IO17 (TX_EN), IO19 (TXD0), IO22 (TXD1),
+//   IO21 (CRS_DV), IO25 (RXD0), IO26 (RXD1), IO18 (MDIO), IO23 (MDC)
+// GPIO réservés UART0 (prog/debug) : IO1 (TX), IO3 (RX)
+
+// --- Modules relais (via module optocoupleur/relais AliExpress) ---
+// IO16 n'est pas exposé sur les headers du WT32-ETH01 → remplacé par IO4
+// IO17 conflicte avec Ethernet TX_EN → remplacé par IO5
+#define RELAY_K1        4   // IO4  — sortie relais K1
+#define RELAY_K2        5   // IO5  — sortie relais K2 (pull-up interne au boot, inoffensif)
+
+// --- Driver moteur pas-à-pas DM556 ---
+#define MOTOR_PUL      32   // IO32 — signal PUL (pas) — PWM LEDC compatible
+#define MOTOR_DIR      33   // IO33 — signal DIR (direction)
+#define MOTOR_ENA      15   // IO15 — signal ENA (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
+
+// --- I²C vers module CJMCU-2317 (MCP23017) ---
+#define I2C_SDA        13   // IO13 — SDA
+#define I2C_SCL        14   // IO14 — SCL
+#define MCP23017_INTA  36   // IO36 — interruption port A (input-only)
+#define MCP23017_INTB  39   // IO39 — interruption port B (input-only)
 
 // ===== STRUCTURES =====
 // Structure for a single configurable I/O pin
