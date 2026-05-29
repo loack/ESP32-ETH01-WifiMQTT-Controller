@@ -12,7 +12,7 @@ La carrier board n'intègre quasiment aucun composant discret complexe. Elle ser
 
 Concevoir une carrier board industrielle/domotique modulaire, robuste et entièrement assemblable à la main. Elle doit :
 
-- Alimenter l'ensemble depuis une source 24V DC ou via PoE (Ethernet).
+- Alimenter l'ensemble depuis une source **24V DC dédiée**.
 - Héberger le module **WT32-ETH01** (ESP32 + Ethernet intégré) pour le traitement et la connectivité.
 - Étendre les I/O de l'ESP32 via un module dédié (CJMCU-2317).
 - Gérer des entrées/sorties isolées 24V via des modules optocoupleurs.
@@ -22,18 +22,14 @@ Concevoir une carrier board industrielle/domotique modulaire, robuste et entièr
 
 ## 2. Architecture de l'Alimentation
 
-La carte accepte deux sources d'alimentation, protégées contre les conflits et l'inversion de polarité (or-ing par diodes Schottky).
+La carte est alimentée par une **source 24V DC dédiée**, protégée contre l'inversion de polarité.
 
-### Source A — Alimentation Directe 24V DC
+### Source — Alimentation 24V DC
 
 | Élément | Spécification |
 |---|---|
 | Connecteur | Bornier à vis, pas de 5.08 mm |
 | Protection | Fusible réarmable PPTC + diode anti-inversion |
-
-### Source B — Power over Ethernet (PoE 48V)
-
-Un **module PoE Splitter** (type RT9400, Ag9900 ou équivalent, en version broches traversantes) est enfichable sur un slot dédié. Il extrait la tension du câble Ethernet (48V) et la convertit en tension intermédiaire (12V ou 5V) utilisable par le reste du circuit.
 
 ### Régulation Principale — Module Buck DC-DC MP1584EN (AliExpress)
 
@@ -52,6 +48,14 @@ Le **5V** alimente directement :
 - Le **level shifter TXS0108** (côté haute tension)
 
 > Aucun régulateur n'est soudé directement sur le PCB : le slot permet de changer de module à tout moment, et le MP1584EN est remplaçable à 0,50 €.
+
+```
+24V DC
+  │
+  └── [MP1584EN → 5V] ─┬─ WT32-ETH01 (pin 5V → 3.3V interne)
+                       ├─ Modules relais / optocoupleurs (VCC)
+                       └─ Level shifter TXS0108 (côté HV)
+```
 
 ---
 
@@ -72,7 +76,7 @@ Le module **WT32-ETH01** intègre sur un seul module le microcontrôleur ESP32, 
 
 > **Point critique KiCad :** le footprint du WT32-ETH01 doit utiliser un pas de 2.0 mm. À vérifier impérativement sur la datasheet officielle (Wireless-Tag) avant de dessiner l'empreinte. Des embases femelles 1×11 au pas de 2.0 mm sont disponibles sur AliExpress.
 
-Le PoE (si utilisé) reste géré en amont par le module PoE Splitter ; la tension intermédiaire est ensuite régulée par le module Buck MP1584EN (5V) avant d'alimenter le WT32-ETH01 via son pin 5V. Le régulateur interne du module produit le 3.3V pour l'ESP32 et le LAN8720A.
+Le module Buck MP1584EN (5V) alimente le WT32-ETH01 via son pin 5V. Le régulateur interne du module produit le 3.3V pour l'ESP32 et le LAN8720A.
 
 ---
 
@@ -97,7 +101,7 @@ Pour protéger l'ESP32 (logique 3.3V) des perturbations et surtensions du monde 
 
 ### Entrées 24V — Modules Optocoupleurs
 
-Des modules optocoupleurs (type PC817 multi-canaux disponibles sur AliExpress) sont enfichés sur des slots dédiés. Chaque canal isole galvaniquement une entrée 24V et délivre un signal logique 3.3V compatible ESP32 ou CJMCU-2317.
+Des modules optocoupleurs (type **OP71A04** disponibles sur AliExpress) sont enfichés sur des slots dédiés. Chaque canal isole galvaniquement une entrée 24V et délivre un signal logique 3.3V compatible ESP32 ou CJMCU-2317.
 
 - Connecteurs côté terrain : borniers à vis (pas de 3.5 mm ou 5.08 mm).
 - Aucun composant discret nécessaire sur le PCB : le module gère en interne les résistances de limitation et le circuit optocoupleur.
@@ -137,7 +141,7 @@ La carrier board est conçue pour une soudure manuelle au fer à souder classiqu
 
 | Type | Règle |
 |---|---|
-| Modules (WT32-ETH01, Buck MP1584EN, PoE Splitter, CJMCU-2317, optocoupleurs, relais, level shifter) | **Pin headers THT femelles** — pas 2.54 mm (sauf WT32-ETH01 : pas 2.0 mm) |
+| Modules (WT32-ETH01, Buck MP1584EN, CJMCU-2317, optocoupleurs, relais, level shifter) | **Pin headers THT femelles** — pas 2.54 mm (sauf WT32-ETH01 : pas 2.0 mm) |
 | Connecteurs terrain (borniers) | THT, pas de 3.5 ou 5.08 mm |
 | Composants discrets résiduels (si nécessaires) | CMS taille **1206 minimum** |
 | Diodes de protection, fusibles PPTC | THT de préférence |
@@ -155,7 +159,7 @@ La carrier board est conçue pour une soudure manuelle au fer à souder classiqu
 
 ## 8. Prochaines Étapes dans KiCad
 
-1. **Créer les symboles schématiques** pour chaque module (WT32-ETH01, MP1584EN, CJMCU-2317, modules optocoupleurs, module PoE Splitter, level shifter) — des rectangles avec le bon nombre de broches suffisent.
+1. **Créer les symboles schématiques** pour chaque module (WT32-ETH01, MP1584EN, CJMCU-2317, modules optocoupleurs, level shifter) — des rectangles avec le bon nombre de broches suffisent.
 2. **Saisir le schéma (Eeschema)** en câblant les blocs conformément à ce CdC.
 3. **Valider les empreintes PCB** : mesurer physiquement chaque module avant de dessiner le footprint, en particulier le WT32-ETH01 (pas 2.0 mm).
 4. **Router le PCB** en respectant les règles de largeur de piste et de clearance définies ci-dessus.
@@ -170,12 +174,11 @@ La carrier board est conçue pour une soudure manuelle au fer à souder classiqu
 |---|---|---|---|---|---|
 | M1 | MCU + Ethernet | **WT32-ETH01** — Wireless-Tag / AliExpress | 1 | ~5,00 € | 5,00 € |
 | M2 | Régulateur Buck 5V | **Module MP1584EN** 3A, réglé à 5V — AliExpress | 1 | ~0,50 € | 0,50 € |
-| M3 | PoE Splitter | **Module RT9400 / Ag9900**, sortie 5V, broches THT — AliExpress | 1 | ~3,00 € | 3,00 € |
-| M4 | Expandeur I/O I²C | **CJMCU-2317** (MCP23017) — AliExpress | 1 | ~1,50 € | 1,50 € |
-| M5 | Optocoupleurs entrées 24V | **Module PC817 4 canaux** — AliExpress | 1–2 | ~0,80 € | ~1,60 € |
-| M6 | Relais de sortie | **Module relais 4 canaux 5V** — AliExpress | 1 | ~1,50 € | 1,50 € |
-| M7 | Level Shifter 3.3V → 5V | **Module TXS0108E** 8 canaux — AliExpress | 1 | ~0,60 € | 0,60 € |
-| | | | | **Sous-total modules** | **~13,70 €** |
+| M3 | Expandeur I/O I²C | **CJMCU-2317** (MCP23017) — AliExpress | 1 | ~1,50 € | 1,50 € |
+| M4 | Optocoupleurs entrées 24V | **Module OP71A04** 4 canaux — AliExpress | 1–2 | ~0,80 € | ~1,60 € |
+| M5 | Relais de sortie | **Module relais 4 canaux 5V** — AliExpress | 1 | ~1,50 € | 1,50 € |
+| M6 | Level Shifter 3.3V → 5V | **Module TXS0108E** 8 canaux — AliExpress | 1 | ~0,60 € | 0,60 € |
+| | | | | **Sous-total modules** | **~10,70 €** |
 
 ### 9.2 Connecteurs sur le PCB
 
@@ -184,12 +187,11 @@ La carrier board est conçue pour une soudure manuelle au fer à souder classiqu
 | J1 | Embase femelle WT32-ETH01 — côté A | **Pin Header Femelle 1×11, pas 2.0 mm** | 1 | 11 |
 | J2 | Embase femelle WT32-ETH01 — côté B | **Pin Header Femelle 1×11, pas 2.0 mm** | 1 | 11 |
 | J3 | Embase femelle Buck MP1584EN | Pin Header Femelle 1×4, pas 2.54 mm | 1 | 4 |
-| J4 | Embase femelle module PoE Splitter | Pin Header Femelle 1×4 ou 1×6, pas 2.54 mm | 1 | 4–6 |
-| J5 | Embase femelle CJMCU-2317 — rangée A | Pin Header Femelle 1×9, pas 2.54 mm | 1 | 9 |
-| J6 | Embase femelle CJMCU-2317 — rangée B | Pin Header Femelle 1×9, pas 2.54 mm | 1 | 9 |
-| J7 | Embase femelle module optocoupleurs | Pin Header Femelle 1×6, pas 2.54 mm | 1–2 | 6 |
-| J8 | Embase femelle module relais (ctrl) | Pin Header Femelle 1×6, pas 2.54 mm | 1 | 6 |
-| J9 | Embase femelle level shifter | Pin Header Femelle 1×10, pas 2.54 mm | 1 | 10 |
+| J4 | Embase femelle CJMCU-2317 — rangée A | Pin Header Femelle 1×9, pas 2.54 mm | 1 | 9 |
+| J5 | Embase femelle CJMCU-2317 — rangée B | Pin Header Femelle 1×9, pas 2.54 mm | 1 | 9 |
+| J6 | Embase femelle module optocoupleurs | Pin Header Femelle 1×6, pas 2.54 mm | 1–2 | 6 |
+| J7 | Embase femelle module relais (ctrl) | Pin Header Femelle 1×6, pas 2.54 mm | 1 | 6 |
+| J8 | Embase femelle level shifter | Pin Header Femelle 1×10, pas 2.54 mm | 1 | 10 |
 
 > Toutes les embases 2.54 mm sont des **pin headers femelles simples rangée générique** (vendus en barrettes de 40 broches à couper — ~0,10 €/barrette sur AliExpress).
 > Les embases 2.0 mm pour le WT32-ETH01 sont disponibles séparément (barrette 1×40 pas 2.0 mm, ~0,15 € sur AliExpress).
@@ -211,7 +213,7 @@ Ces composants sont les seuls à souder directement sur le PCB :
 
 | Réf. | Désignation | Référence type | Qté | Boîtier |
 |---|---|---|---|---|
-| D1, D2 | Diodes Schottky or-ing (protection sources) | **1N5819** | 2 | DO-41 (THT) |
+| D1 | Diode Schottky anti-inversion 24V | **1N5819** | 1 | DO-41 (THT) |
 | F1 | Fusible réarmable PPTC 0.5 A | **MF-R050** ou équivalent | 1 | THT |
 | R1, R2 | Résistances pull-up I²C SDA/SCL (4.7 kΩ) | Résistance 4.7 kΩ | 2 | 1206 (CMS) |
 
@@ -219,8 +221,8 @@ Ces composants sont les seuls à souder directement sur le PCB :
 
 | Poste | Coût estimé |
 |---|---|
-| Modules préassemblés | ~13,70 € |
+| Modules préassemblés | ~10,70 € |
 | Connecteurs (pin headers + borniers) | ~2,00 € |
 | Composants discrets résiduels | ~0,50 € |
 | PCB (5 pcs JLCPCB, 2 couches) | ~1,00 € / carte |
-| **TOTAL** | **~17 €** |
+| **TOTAL** | **~14 €** |
