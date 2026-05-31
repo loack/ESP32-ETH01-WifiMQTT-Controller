@@ -174,7 +174,7 @@ La carrier board est conçue pour une soudure manuelle au fer à souder classiqu
 |---|---|---|---|---|---|
 | M1 | MCU + Ethernet | **WT32-ETH01** — Wireless-Tag / AliExpress | 1 | ~5,00 € | 5,00 € |
 | M2 | Régulateur Buck 5V | **Module MP1584EN** 3A, réglé à 5V — AliExpress | 1 | ~0,50 € | 0,50 € |
-| M3 | Expandeur I/O I²C | **CJMCU-2317** (MCP23017) — AliExpress | 1 | ~1,50 € | 1,50 € |
+| M3 | Expandeur I/O I²C | **CJMCU-2317** (MCP23017) — AliExpress | 1 | ~1,50 € | 1,50 € | / à voir en boitier DIP-28 eventuellement
 | M4 | Optocoupleurs entrées 24V | **Module OP71A04** 4 canaux — AliExpress | 1–2 | ~0,80 € | ~1,60 € |
 | M5 | Relais de sortie | **Module relais 4 canaux 5V** — AliExpress | 1 | ~1,50 € | 1,50 € |
 | M6 | Level Shifter 3.3V → 5V | **Module TXS0108E** 8 canaux — AliExpress | 1 | ~0,60 € | 0,60 € |
@@ -215,7 +215,6 @@ Ces composants sont les seuls à souder directement sur le PCB :
 |---|---|---|---|---|
 | D1 | Diode Schottky anti-inversion 24V | **1N5819** | 1 | DO-41 (THT) |
 | F1 | Fusible réarmable PPTC 0.5 A | **MF-R050** ou équivalent | 1 | THT |
-| R1, R2 | Résistances pull-up I²C SDA/SCL (4.7 kΩ) | Résistance 4.7 kΩ | 2 | 1206 (CMS) |
 
 ### 9.5 Coût Total Estimé par Carte
 
@@ -226,3 +225,12 @@ Ces composants sont les seuls à souder directement sur le PCB :
 | Composants discrets résiduels | ~0,50 € |
 | PCB (5 pcs JLCPCB, 2 couches) | ~1,00 € / carte |
 | **TOTAL** | **~14 €** |
+
+
+ # Cablage des I/O
+
+Signal MCP23017	ESP32 GPIO
+SDA	                IO32
+SCL	                IO33
+INTA	            IO36
+INTB	            IO39

@@ -450,7 +450,9 @@
     "pinned_footprint_libs": [
       "WT32-ETH01"
     ],
-    "pinned_symbol_libs": []
+    "pinned_symbol_libs": [
+      "WT32-ETH01"
+    ]
   },
   "meta": {
     "filename": "eth01-24v.kicad_pro",

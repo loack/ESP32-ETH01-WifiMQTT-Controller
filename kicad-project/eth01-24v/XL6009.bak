@@ -22,7 +22,7 @@
 				)
 			)
 		)
-		(property "Footprint" ""
+		(property "Footprint" "WT32-ETH01:BSS138"
 			(at 0 0 0)
 			(effects
 				(font
