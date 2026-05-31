@@ -1,4 +1,4 @@
-47554891683290224
+47556688915885348
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -189154,7 +189154,14 @@ MP1584_AIO
 8
 8
 WT32-ETH01
-OP71A04
+OP71A04 - 3.3V24V
+
+
+0
+14
+14
+WT32-ETH01
+OP71A04 - 24V3.3V
 
 
 0
