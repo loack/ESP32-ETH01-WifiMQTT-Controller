@@ -76,6 +76,25 @@
             <h2 style="margin-top: 30px;">État des Entrées</h2>
             <div class="grid" id="inputs-status"><p>Aucune entrée configurée.</p></div>
 
+            <h2 style="margin-top: 30px;">Moteur pas-à-pas (DM556)</h2>
+            <div class="card">
+                <div class="form-group"><label for="motor-steps">Nombre de pas</label><input type="number" id="motor-steps" placeholder="Ex: 200" min="1" value="200"></div>
+                <div class="form-group">
+                    <label for="motor-direction">Sens</label>
+                    <select id="motor-direction">
+                        <option value="forward">Avant</option>
+                        <option value="backward">Arrière</option>
+                    </select>
+                </div>
+                <div class="form-group"><label for="motor-speed">Vitesse (pas/seconde)</label><input type="number" id="motor-speed" value="500" min="1" max="20000"></div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="startMotor()">▶️ Démarrer</button>
+                    <button class="btn btn-danger" onclick="stopMotor()">⏹ Arrêter</button>
+                </div>
+                <div class="status-item" style="margin-top: 15px;"><span>État</span><span id="motor-state">...</span></div>
+                <div class="status-item"><span>Progression</span><span id="motor-progress">-</span></div>
+            </div>
+
             <h3 style="margin-top: 20px;">Logs</h3>
             <div id="serial-logs" style="background: #f1f2f6; padding: 15px; border-radius: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px;">
                 <p style="color: #999;">Chargement des logs...</p>
@@ -404,6 +423,40 @@
         });
     }
 
+    function startMotor() {
+        const steps = parseInt(document.getElementById('motor-steps').value);
+        const direction = document.getElementById('motor-direction').value;
+        const speed = parseInt(document.getElementById('motor-speed').value);
+        if (isNaN(steps) || steps <= 0) { alert('Nombre de pas invalide.'); return; }
+        if (isNaN(speed) || speed <= 0) { alert('Vitesse invalide.'); return; }
+
+        fetch('/api/motor/move', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ steps, direction, speed })
+        }).then(r => r.json()).then(data => {
+            if (!data.success) alert('Erreur: ' + data.message);
+            loadMotorStatus();
+        });
+    }
+
+    function stopMotor() {
+        fetch('/api/motor/stop', { method: 'POST' })
+            .then(r => r.json())
+            .then(() => loadMotorStatus());
+    }
+
+    function loadMotorStatus() {
+        fetch('/api/motor/status').then(r => r.json()).then(data => {
+            document.getElementById('motor-state').innerHTML = data.running
+                ? '<span class="badge badge-success">En mouvement</span>'
+                : '<span class="badge badge-danger">Arrêté</span>';
+            document.getElementById('motor-progress').textContent = data.stepsTarget > 0
+                ? `${data.stepsDone} / ${data.stepsTarget} pas (${data.direction === 'backward' ? 'Arrière' : 'Avant'}, ${data.speed} pas/s)`
+                : '-';
+        });
+    }
+
     function connectMQTT() {
         fetch('/api/mqtt/connect', { method: 'POST' })
             .then(r => r.json())
@@ -463,7 +516,9 @@
 
     window.onload = () => {
         loadStatus();
+        loadMotorStatus();
         setInterval(loadStatus, 5000);
+        setInterval(loadMotorStatus, 1000);
     };
     
     // WebSocket for real-time logs (fallback to HTTP polling remains available)

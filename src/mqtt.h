@@ -28,4 +28,10 @@ void publishMQTT(const char* sub_topic, const char* payload, boolean retained = 
 void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void executeCommand(int pin, int state);
 
+// Moteur pas-à-pas (DM556) : publie l'état courant sur <device>/status/motor
+// et détecte les transitions démarré/arrêté pour publier automatiquement,
+// quelle que soit l'origine de la commande (web ou MQTT).
+void publishMotorStatus();
+void checkMotorStatusChange();
+
 #endif // MQTT_H

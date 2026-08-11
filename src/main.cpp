@@ -15,6 +15,7 @@
 #include "mqtt.h"
 #include "serial_manager.h"
 #include "mcp23017.h"
+#include "stepper_motor.h"
 
 // WebSocket declared in web_server.cpp
 extern AsyncWebSocket ws;
@@ -275,6 +276,9 @@ void setup() {
   // virtual A0-A7/B0-B7 pins are ready to receive their default states.
   mcpIoBegin();
 
+  // Initialize stepper motor driver (DM556)
+  motorBegin();
+
   // Apply I/O pin configurations
   applyIOPinModes();
   logMessage("I/O pin configurations applied.");
@@ -436,6 +440,7 @@ void loop() {
 
   processScheduledCommands();
   serialManager.loop();
+  checkMotorStatusChange(); // publie <device>/status/motor sur MQTT dès que le moteur démarre/s'arrête
 
   // Check network connection (WiFi or Ethernet)
   bool networkOk = config.useEthernet ? ethConnected : (WiFi.status() == WL_CONNECTED);

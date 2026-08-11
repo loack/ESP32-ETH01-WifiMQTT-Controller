@@ -3,6 +3,7 @@
 #include "mqtt.h"
 #include "serial_manager.h"
 #include "mcp23017.h"
+#include "stepper_motor.h"
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -280,6 +281,55 @@ void setupWebServer() {
       l["message"] = log.message;
     }
     
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+  });
+
+  // API pour lancer un déplacement du moteur pas-à-pas (DM556)
+  server.on("/api/motor/move", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+      JsonDocument doc;
+      if (deserializeJson(doc, (const char*)data) != DeserializationError::Ok) {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Invalid JSON\"}");
+        return;
+      }
+
+      uint32_t steps = doc["steps"] | 0;
+      uint32_t speed = doc["speed"] | 0;
+      uint32_t accel = doc["accel"] | 0; // 0 = valeur par défaut du firmware
+      const char* dirStr = doc["direction"] | "forward";
+      bool forward = (strcmp(dirStr, "backward") != 0);
+
+      String errorMsg;
+      if (motorStart(steps, forward, speed, accel, errorMsg)) {
+        request->send(200, "application/json", "{\"success\":true, \"message\":\"Mouvement démarré\"}");
+      } else {
+        JsonDocument errDoc;
+        errDoc["success"] = false;
+        errDoc["message"] = errorMsg;
+        String resp;
+        serializeJson(errDoc, resp);
+        request->send(409, "application/json", resp);
+      }
+    }
+  );
+
+  // API pour arrêter immédiatement le moteur
+  server.on("/api/motor/stop", HTTP_POST, [](AsyncWebServerRequest *request){
+    motorStop();
+    request->send(200, "application/json", "{\"success\":true, \"message\":\"Moteur arrêté\"}");
+  });
+
+  // API pour connaître l'état du moteur (progression du mouvement en cours)
+  server.on("/api/motor/status", HTTP_GET, [](AsyncWebServerRequest *request){
+    JsonDocument doc;
+    doc["running"] = motorIsRunning();
+    doc["stepsDone"] = motorGetStepsDone();
+    doc["stepsTarget"] = motorGetStepsTarget();
+    doc["direction"] = motorGetLastDirection() ? "forward" : "backward";
+    doc["speed"] = motorGetLastSpeed();
+    doc["accel"] = motorGetLastAccel();
     String response;
     serializeJson(doc, response);
     request->send(200, "application/json", response);

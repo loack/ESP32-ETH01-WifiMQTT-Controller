@@ -20,9 +20,11 @@
 #define RELAY_K2        5   // IO5  — sortie relais K2 (pull-up interne au boot, inoffensif)
 
 // --- Driver moteur pas-à-pas DM556 ---
-#define MOTOR_PUL      32   // IO32 — signal PUL (pas) — PWM LEDC compatible
-#define MOTOR_DIR      33   // IO33 — signal DIR (direction)
-#define MOTOR_ENA      15   // IO15 — signal ENA (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
+// Sur cette configuration, IO4 n'est plus câblé au relais K1 (RELAY_K1
+// ci-dessus est donc obsolète sur cette variante de carte).
+#define MOTOR_PUL       4   // IO4  — signal PUL+ (pas)
+#define MOTOR_DIR      14   // IO14 — signal DIR+ (direction)
+#define MOTOR_ENA      15   // IO15 — signal EN+ (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
 
 // --- I²C vers module CJMCU-2317 (MCP23017) ---
 // ⚠️ IO32/IO33 sont aussi listés plus haut comme MOTOR_PUL/MOTOR_DIR (DM556).

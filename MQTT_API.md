@@ -25,6 +25,29 @@ Permet d'envoyer des messages série à un périphérique connecté (ex: robot K
 #### Synchronisation et logs
 Chaque message reçu via MQTT et transmis sur le port série est journalisé (timestamp, direction TX, contenu). Les réponses reçues sur le port série peuvent être publiées en MQTT (voir ci-dessous).
 
+### 2.5. Moteur pas-à-pas (DM556)
+
+Pilote le moteur pas-à-pas connecté au driver DM556 (PUL+=IO4, DIR+=IO14, EN+=IO15).
+
+- **Sujet :** `<device_name>/motor/move`
+- **Méthode :** Publier
+- **Payload (JSON) :**
+  ```json
+  {
+    "steps": 200,
+    "direction": "forward",
+    "speed": 500
+  }
+  ```
+  - `steps` (requis) : nombre de pas à effectuer.
+  - `direction` (optionnel, défaut `"forward"`) : `"forward"` ou `"backward"`.
+  - `speed` (requis) : vitesse en pas/seconde (1 à 20000).
+- **Effet :** Démarre le mouvement immédiatement (non bloquant). Si un mouvement est déjà en cours ou si les paramètres sont invalides, la commande est ignorée et une erreur est journalisée (voir logs).
+
+- **Sujet :** `<device_name>/motor/stop`
+- **Méthode :** Publier (n'importe quel payload)
+- **Effet :** Arrêt immédiat du moteur et désactivation du driver (EN+ = HIGH).
+
 ### 2.1. Contrôle des Broches de Sortie
 
 Pour commander une broche configurée en sortie.
@@ -137,6 +160,21 @@ Les 16 broches de l'expandeur I2C MCP23017 sont exposées comme des I/O standard
 - `MCP_B0` à `MCP_B7` : **entrées** avec pull-up interne (port B du MCP23017).
 
 Ces 16 IOs sont ajoutées automatiquement à la configuration au premier démarrage suivant l'installation du firmware (voir page "I/O" de l'interface web pour les renommer si besoin). Câblage : SDA=IO33, SCL=IO32, INTA=IO36 (inutilisée), INTB=IO39 (détection de changement sur le port B).
+
+### 3.1.2. Statut du Moteur Pas-à-Pas
+
+- **Sujet :** `<device_name>/status/motor`
+- **Méthode :** Message publié par l'ESP32 (retenu), à chaque démarrage/arrêt du moteur (déclenché par MQTT ou par l'interface web) ainsi qu'à la (re)connexion MQTT.
+- **Payload (JSON) :**
+  ```json
+  {
+    "running": true,
+    "stepsDone": 42,
+    "stepsTarget": 200,
+    "direction": "forward",
+    "speed": 500
+  }
+  ```
 
 ### 3.2. Disponibilité de l'Appareil
 

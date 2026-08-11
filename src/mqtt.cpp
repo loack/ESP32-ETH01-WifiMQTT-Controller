@@ -3,6 +3,7 @@
 #include "mqtt.h"
 #include "serial_manager.h"
 #include "mcp23017.h"
+#include "stepper_motor.h"
 #include <ArduinoJson.h>
 #include <time.h>
 #include <sys/time.h>
@@ -88,6 +89,37 @@ void executeCommand(int pin, int state) {
     if (mqttEnabled && mqttClient.connected()) {
       publishMQTT(topic, payload);
     }
+  }
+}
+
+void publishMotorStatus() {
+  JsonDocument doc;
+  doc["running"] = motorIsRunning();
+  doc["stepsDone"] = motorGetStepsDone();
+  doc["stepsTarget"] = motorGetStepsTarget();
+  doc["direction"] = motorGetLastDirection() ? "forward" : "backward";
+  doc["speed"] = motorGetLastSpeed();
+
+  char payload[192];
+  serializeJson(doc, payload);
+
+  char topic[128];
+  snprintf(topic, sizeof(topic), "%s/status/motor", config.deviceName);
+
+  if (mqttEnabled && mqttClient.connected()) {
+    publishMQTT(topic, payload, true); // retained : un nouvel abonné connaît l'état courant
+  }
+}
+
+// Détecte les transitions démarré<->arrêté du moteur, quelle que soit
+// l'origine de la commande (web ou MQTT), pour publier automatiquement le
+// statut sans coupler stepper_motor.cpp au client MQTT.
+static bool s_lastMotorRunning = false;
+void checkMotorStatusChange() {
+  bool running = motorIsRunning();
+  if (running != s_lastMotorRunning) {
+    s_lastMotorRunning = running;
+    publishMotorStatus();
   }
 }
 
@@ -225,6 +257,32 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
         return;
     }
 
+    // Handle stepper motor (DM556) commands
+    if (topicStr.equals(baseTopic + "/motor/move")) {
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, payload, length);
+        if (error) {
+            logMessage(String("Motor move: deserializeJson() failed: ") + error.c_str());
+            return;
+        }
+
+        uint32_t steps = doc["steps"] | 0;
+        uint32_t speed = doc["speed"] | 0;
+        const char* dirStr = doc["direction"] | "forward";
+        bool forward = (strcmp(dirStr, "backward") != 0);
+
+        String errorMsg;
+        if (!motorStart(steps, forward, speed, errorMsg)) {
+            logPrintf("⚠️ Motor move refusé via MQTT: %s", errorMsg.c_str());
+        }
+        return;
+    }
+
+    if (topicStr.equals(baseTopic + "/motor/stop")) {
+        motorStop();
+        return;
+    }
+
     // Check if it's a control topic for a pin
     String controlTopicPrefix = baseTopic + "/control/";
     if (!topicStr.startsWith(controlTopicPrefix) || !topicStr.endsWith("/set")) {
@@ -321,6 +379,17 @@ void reconnectMQTT() {
     String pingTopic = String(config.deviceName) + "/ping";
     mqttClient.subscribe(pingTopic.c_str());
     logPrintf("✓ Abonné à: %s", pingTopic.c_str());
+
+    // Subscribe to stepper motor (DM556) command topics
+    String motorMoveTopic = String(config.deviceName) + "/motor/move";
+    mqttClient.subscribe(motorMoveTopic.c_str());
+    logPrintf("✓ Abonné à: %s", motorMoveTopic.c_str());
+    String motorStopTopic = String(config.deviceName) + "/motor/stop";
+    mqttClient.subscribe(motorStopTopic.c_str());
+    logPrintf("✓ Abonné à: %s", motorStopTopic.c_str());
+
+    // Publish current motor status (retained) so subscribers know its state on (re)connect
+    publishMotorStatus();
 
     // Subscribe to serial bridge topic
     if (config.useSerialBridge) {
