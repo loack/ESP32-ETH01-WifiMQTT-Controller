@@ -14,6 +14,7 @@
 #include "config.h"
 #include "mqtt.h"
 #include "serial_manager.h"
+#include "mcp23017.h"
 
 // WebSocket declared in web_server.cpp
 extern AsyncWebSocket ws;
@@ -258,6 +259,7 @@ void setup() {
   }
   
   loadIOs();
+  mcpEnsureDefaultIOsRegistered();
   logMessage("Configuration and I/O settings loaded.");
   blinkStatusLED(2, 100);
 
@@ -268,6 +270,10 @@ void setup() {
   } else {
     logMessage("Serial Bridge is disabled.");
   }
+
+  // Initialize MCP23017 I/O expander (I2C) BEFORE applying IO modes so the
+  // virtual A0-A7/B0-B7 pins are ready to receive their default states.
+  mcpIoBegin();
 
   // Apply I/O pin configurations
   applyIOPinModes();
@@ -579,6 +585,17 @@ void applyIOPinModes() {
 
     pinMode(STATUS_LED, OUTPUT); // Définit GPIO 2 comme une sortie (LED sur WT32-ETH01)
     for (int i = 0; i < ioPinCount; i++) {
+        if (isMcpVirtualPin(ioPins[i].pin)) {
+            // Broche virtuelle MCP23017 : le sens est fixé par le câblage
+            // (port A = sorties, port B = entrées), configuré dans mcpIoBegin().
+            if (ioPins[i].mode == 2) { // OUTPUT (A0-A7)
+                mcpIoWrite(ioPins[i].pin, ioPins[i].defaultState);
+                logPrintf("MCP23017 pin %d (%s) configured as OUTPUT", ioPins[i].pin, ioPins[i].name);
+            } else if (ioPins[i].mode == 1) { // INPUT (B0-B7)
+                logPrintf("MCP23017 pin %d (%s) configured as INPUT (pull-up)", ioPins[i].pin, ioPins[i].name);
+            }
+            continue;
+        }
         if (ioPins[i].mode == 1) { // INPUT
             // Apply the selected input type
             switch (ioPins[i].inputType) {
@@ -614,9 +631,11 @@ void handleIOs(void *pvParameters) {
   logMessage("✅ I/O handling task started.");
 
   for (;;) { // Infinite loop for the task
+    mcpIoService(); // Traite l'interruption INTB et rafraîchit le cache MCP23017 (port B)
+
     for (int i = 0; i < ioPinCount; i++) {
       if (ioPins[i].mode == 1) { // INPUT
-        bool currentState = digitalRead(ioPins[i].pin);
+        bool currentState = isMcpVirtualPin(ioPins[i].pin) ? mcpIoRead(ioPins[i].pin) : digitalRead(ioPins[i].pin);
 
         // Détection immédiate du changement d'état (sans debounce)
         if (currentState != ioPins[i].state) {

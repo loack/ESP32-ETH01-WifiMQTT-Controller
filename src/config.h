@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define MAX_IOS 20
+#define MAX_IOS 40  // 20 IOs natifs + 16 broches virtuelles MCP23017 (A0-A7 / B0-B7) + marge
 #define MAX_LOG_LINES 64
 
 
@@ -25,10 +25,14 @@
 #define MOTOR_ENA      15   // IO15 — signal ENA (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
 
 // --- I²C vers module CJMCU-2317 (MCP23017) ---
-#define I2C_SDA        13   // IO13 — SDA
-#define I2C_SCL        14   // IO14 — SCL
-#define MCP23017_INTA  36   // IO36 — interruption port A (input-only)
-#define MCP23017_INTB  39   // IO39 — interruption port B (input-only)
+// ⚠️ IO32/IO33 sont aussi listés plus haut comme MOTOR_PUL/MOTOR_DIR (DM556).
+// Tant qu'aucun code moteur n'utilise ces macros, il n'y a pas de conflit
+// réel, mais il faudra reassigner l'un des deux jeux de pins avant d'ajouter
+// la gestion du moteur pas-à-pas.
+#define I2C_SDA        33   // IO33 — SDA
+#define I2C_SCL        32   // IO32 — SCL
+#define MCP23017_INTA  36   // IO36 — interruption port A (non utilisée : port A = sorties)
+#define MCP23017_INTB  39   // IO39 — interruption port B (input-only, change d'état sur les entrées B0-B7)
 
 // ===== STRUCTURES =====
 // Structure for a single configurable I/O pin

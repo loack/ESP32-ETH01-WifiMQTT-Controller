@@ -2,6 +2,7 @@
 #include "config.h"
 #include "mqtt.h"
 #include "serial_manager.h"
+#include "mcp23017.h"
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -66,7 +67,7 @@ void setupWebServer() {
       io["name"] = ioPins[i].name;
       io["pin"] = ioPins[i].pin;
       io["mode"] = ioPins[i].mode;
-      io["state"] = digitalRead(ioPins[i].pin);
+      io["state"] = isMcpVirtualPin(ioPins[i].pin) ? mcpIoRead(ioPins[i].pin) : digitalRead(ioPins[i].pin);
     }
     
     String response;

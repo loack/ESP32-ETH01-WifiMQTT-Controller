@@ -129,6 +129,15 @@ L'ESP32 publie l'état de ses broches (entrées et sorties).
     }
     ```
 
+### 3.1.1. Cas particulier : expandeur MCP23017 (module CJMCU-2317)
+
+Les 16 broches de l'expandeur I2C MCP23017 sont exposées comme des I/O standard, avec les mêmes sujets de contrôle/statut que ci-dessus (`<device_name>/control/MCP_A0/set`, `<device_name>/status/MCP_B3`, etc.) :
+
+- `MCP_A0` à `MCP_A7` : **sorties** (port A du MCP23017).
+- `MCP_B0` à `MCP_B7` : **entrées** avec pull-up interne (port B du MCP23017).
+
+Ces 16 IOs sont ajoutées automatiquement à la configuration au premier démarrage suivant l'installation du firmware (voir page "I/O" de l'interface web pour les renommer si besoin). Câblage : SDA=IO33, SCL=IO32, INTA=IO36 (inutilisée), INTB=IO39 (détection de changement sur le port B).
+
 ### 3.2. Disponibilité de l'Appareil
 
 Indique si l'appareil est connecté au broker MQTT.

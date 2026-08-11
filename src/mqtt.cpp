@@ -2,6 +2,7 @@
 #include <PubSubClient.h>
 #include "mqtt.h"
 #include "serial_manager.h"
+#include "mcp23017.h"
 #include <ArduinoJson.h>
 #include <time.h>
 #include <sys/time.h>
@@ -47,7 +48,11 @@ String getFormattedTime() {
 }
 
 void executeCommand(int pin, int state) {
-  digitalWrite(pin, state);
+  if (isMcpVirtualPin(pin)) {
+    mcpIoWrite(pin, state);
+  } else {
+    digitalWrite(pin, state);
+  }
   for (int i = 0; i < ioPinCount; i++) {
     if (ioPins[i].pin == pin) {
       ioPins[i].state = state;
