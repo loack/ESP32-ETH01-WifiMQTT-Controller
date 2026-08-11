@@ -36,12 +36,14 @@ Pilote le moteur pas-à-pas connecté au driver DM556 (PUL+=IO4, DIR+=IO14, EN+=
   {
     "steps": 200,
     "direction": "forward",
-    "speed": 500
+    "speed": 500,
+    "accel": 2000
   }
   ```
   - `steps` (requis) : nombre de pas à effectuer.
   - `direction` (optionnel, défaut `"forward"`) : `"forward"` ou `"backward"`.
-  - `speed` (requis) : vitesse en pas/seconde (1 à 20000).
+  - `speed` (requis) : vitesse de croisière en pas/seconde (1 à 20000).
+  - `accel` (optionnel, défaut `2000`) : accélération/décélération en pas/s² de la rampe trapézoïdale. Le moteur démarre à vitesse réduite puis accélère jusqu'à `speed`, et décélère avant l'arrêt pour s'arrêter exactement au dernier pas — sans rampe (accélération instantanée), le moteur peut "brouter" sans tourner au-delà d'une certaine vitesse au lieu de démarrer.
 - **Effet :** Démarre le mouvement immédiatement (non bloquant). Si un mouvement est déjà en cours ou si les paramètres sont invalides, la commande est ignorée et une erreur est journalisée (voir logs).
 
 - **Sujet :** `<device_name>/motor/stop`
@@ -172,7 +174,8 @@ Ces 16 IOs sont ajoutées automatiquement à la configuration au premier démarr
     "stepsDone": 42,
     "stepsTarget": 200,
     "direction": "forward",
-    "speed": 500
+    "speed": 500,
+    "accel": 2000
   }
   ```
 

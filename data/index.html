@@ -86,7 +86,11 @@
                         <option value="backward">Arrière</option>
                     </select>
                 </div>
-                <div class="form-group"><label for="motor-speed">Vitesse (pas/seconde)</label><input type="number" id="motor-speed" value="500" min="1" max="20000"></div>
+                <div class="form-group"><label for="motor-speed">Vitesse de croisière (pas/seconde)</label><input type="number" id="motor-speed" value="500" min="1" max="20000"></div>
+                <div class="form-group"><label for="motor-accel">Accélération (pas/s²)</label><input type="number" id="motor-accel" value="2000" min="1"></div>
+                <p style="color: var(--dark-gray); font-size: 13px; margin-top: -10px;">
+                    Le moteur démarre à vitesse réduite puis accélère jusqu'à la vitesse de croisière (et décélère avant l'arrêt). Si le moteur "broute" sans tourner à haute vitesse, réduis l'accélération.
+                </p>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-primary" onclick="startMotor()">▶️ Démarrer</button>
                     <button class="btn btn-danger" onclick="stopMotor()">⏹ Arrêter</button>
@@ -427,13 +431,14 @@
         const steps = parseInt(document.getElementById('motor-steps').value);
         const direction = document.getElementById('motor-direction').value;
         const speed = parseInt(document.getElementById('motor-speed').value);
+        const accel = parseInt(document.getElementById('motor-accel').value);
         if (isNaN(steps) || steps <= 0) { alert('Nombre de pas invalide.'); return; }
         if (isNaN(speed) || speed <= 0) { alert('Vitesse invalide.'); return; }
 
         fetch('/api/motor/move', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ steps, direction, speed })
+            body: JSON.stringify({ steps, direction, speed, accel: isNaN(accel) ? 0 : accel })
         }).then(r => r.json()).then(data => {
             if (!data.success) alert('Erreur: ' + data.message);
             loadMotorStatus();
@@ -452,7 +457,7 @@
                 ? '<span class="badge badge-success">En mouvement</span>'
                 : '<span class="badge badge-danger">Arrêté</span>';
             document.getElementById('motor-progress').textContent = data.stepsTarget > 0
-                ? `${data.stepsDone} / ${data.stepsTarget} pas (${data.direction === 'backward' ? 'Arrière' : 'Avant'}, ${data.speed} pas/s)`
+                ? `${data.stepsDone} / ${data.stepsTarget} pas (${data.direction === 'backward' ? 'Arrière' : 'Avant'}, ${data.speed} pas/s, accel ${data.accel} pas/s²)`
                 : '-';
         });
     }

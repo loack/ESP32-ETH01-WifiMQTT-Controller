@@ -99,6 +99,7 @@ void publishMotorStatus() {
   doc["stepsTarget"] = motorGetStepsTarget();
   doc["direction"] = motorGetLastDirection() ? "forward" : "backward";
   doc["speed"] = motorGetLastSpeed();
+  doc["accel"] = motorGetLastAccel();
 
   char payload[192];
   serializeJson(doc, payload);
@@ -268,11 +269,12 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
         uint32_t steps = doc["steps"] | 0;
         uint32_t speed = doc["speed"] | 0;
+        uint32_t accel = doc["accel"] | 0; // 0 = valeur par défaut du firmware
         const char* dirStr = doc["direction"] | "forward";
         bool forward = (strcmp(dirStr, "backward") != 0);
 
         String errorMsg;
-        if (!motorStart(steps, forward, speed, errorMsg)) {
+        if (!motorStart(steps, forward, speed, accel, errorMsg)) {
             logPrintf("⚠️ Motor move refusé via MQTT: %s", errorMsg.c_str());
         }
         return;
