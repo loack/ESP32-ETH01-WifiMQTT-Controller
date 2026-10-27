@@ -733,7 +733,7 @@
       {
         "filename": "eth01-24v.kicad_sch",
         "name": "eth01-24v",
-        "uuid": "00000000-0000-0000-0000-000000000000"
+        "uuid": "703f938c-34a3-4f94-8687-e377b1a1dc24"
       }
     ],
     "used_designators": "",
@@ -742,7 +742,7 @@
   "sheets": [
     [
       "703f938c-34a3-4f94-8687-e377b1a1dc24",
-      "Root"
+      "eth01-24v"
     ]
   ],
   "text_variables": {},

@@ -535,6 +535,11 @@ void loadConfig() {
   config.serialTxPin = preferences.getInt("serTx", 5);
   config.serialBaudRate = preferences.getLong("serBaud", 9600);
 
+  config.motorEnabled = preferences.getBool("motorEn", MOTOR_DEFAULT_ENABLED);
+  config.motorPulPin = preferences.getUChar("motorPul", MOTOR_PUL);
+  config.motorDirPin = preferences.getUChar("motorDir", MOTOR_DIR);
+  config.motorEnaPin = preferences.getUChar("motorEna", MOTOR_ENA);
+
   config.initialized = preferences.getBool("init", false);
   logMessage("Configuration loaded.");
 }
@@ -563,6 +568,11 @@ void saveConfig() {
   preferences.putInt("serTx", config.serialTxPin);
   preferences.putLong("serBaud", config.serialBaudRate);
 
+  preferences.putBool("motorEn", config.motorEnabled);
+  preferences.putUChar("motorPul", config.motorPulPin);
+  preferences.putUChar("motorDir", config.motorDirPin);
+  preferences.putUChar("motorEna", config.motorEnaPin);
+
   preferences.putBool("init", true);
   logMessage("Configuration saved.");
 }
@@ -590,6 +600,12 @@ void applyIOPinModes() {
 
     pinMode(STATUS_LED, OUTPUT); // Définit GPIO 2 comme une sortie (LED sur WT32-ETH01)
     for (int i = 0; i < ioPinCount; i++) {
+        if (motorIsPinUsed(ioPins[i].pin)) {
+            // Broche réservée au DM556 : on ne la reconfigure pas (sinon
+            // PUL/DIR/EN seraient écrasés). L'I/O reste listé mais inactif.
+            logPrintf("⚠️ Pin %d (%s) ignoré : broche utilisée par le moteur DM556", ioPins[i].pin, ioPins[i].name);
+            continue;
+        }
         if (isMcpVirtualPin(ioPins[i].pin)) {
             // Broche virtuelle MCP23017 : le sens est fixé par le câblage
             // (port A = sorties, port B = entrées), configuré dans mcpIoBegin().
@@ -639,7 +655,7 @@ void handleIOs(void *pvParameters) {
     mcpIoService(); // Traite l'interruption INTB et rafraîchit le cache MCP23017 (port B)
 
     for (int i = 0; i < ioPinCount; i++) {
-      if (ioPins[i].mode == 1) { // INPUT
+      if (ioPins[i].mode == 1 && !motorIsPinUsed(ioPins[i].pin)) { // INPUT (hors broches moteur)
         bool currentState = isMcpVirtualPin(ioPins[i].pin) ? mcpIoRead(ioPins[i].pin) : digitalRead(ioPins[i].pin);
 
         // Détection immédiate du changement d'état (sans debounce)

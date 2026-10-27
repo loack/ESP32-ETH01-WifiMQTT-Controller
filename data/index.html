@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Generic IO</title>
+    <title>EPS32 24V I/O Motor control</title>
     <style>
         :root { --primary-color: #4a69bd; --secondary-color: #6a89cc; --light-gray: #f5f6fa; --dark-gray: #576574; --success-color: #2ecc71; --error-color: #e74c3c; --off-color: #c8d6e5; --on-color: #feca57; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--light-gray); color: var(--dark-gray); margin: 20px; }
@@ -42,12 +42,18 @@
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: var(--light-gray); }
+        .motor-panel { transition: opacity 0.3s; }
+        .motor-panel.disabled { opacity: 0.45; filter: grayscale(1); }
+        .motor-panel.disabled table, .motor-panel.disabled .motor-panel-body { pointer-events: none; }
+        .motor-panel td select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; }
+        .badge-warning { background: #e67e22; }
+        tr.io-conflict td { background: #fdecea; }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>ESP32 Generic IO</h1>
+        <h1>EPS32 24V I/O Motor control</h1>
         <p>Contrôleur d'I/O avec interface Web et MQTT</p>
     </div>
     <div class="tabs">
@@ -76,6 +82,7 @@
             <h2 style="margin-top: 30px;">État des Entrées</h2>
             <div class="grid" id="inputs-status"><p>Aucune entrée configurée.</p></div>
 
+            <div id="motor-control-section" style="display: none;">
             <h2 style="margin-top: 30px;">Moteur pas-à-pas (DM556)</h2>
             <div class="card">
                 <div class="form-group"><label for="motor-steps">Nombre de pas</label><input type="number" id="motor-steps" placeholder="Ex: 200" min="1" value="200"></div>
@@ -97,6 +104,7 @@
                 </div>
                 <div class="status-item" style="margin-top: 15px;"><span>État</span><span id="motor-state">...</span></div>
                 <div class="status-item"><span>Progression</span><span id="motor-progress">-</span></div>
+            </div>
             </div>
 
             <h3 style="margin-top: 20px;">Logs</h3>
@@ -121,6 +129,36 @@
                 <button class="btn btn-primary" onclick="addIO()">Ajouter I/O</button>
             </div>
             <button class="btn btn-primary" style="margin-top: 20px;" onclick="saveIOs()">💾 Enregistrer la Configuration I/O</button>
+
+            <h2 style="margin-top: 40px;">Moteur pas-à-pas (DM556)</h2>
+            <div class="card">
+                <div class="form-group" style="display: flex; align-items: center;">
+                    <label class="toggle-switch" style="margin-bottom: 0;">
+                        <input type="checkbox" id="motor-enabled" onchange="updateMotorPanelState()">
+                        <span class="slider"></span>
+                    </label>
+                    <span style="margin-left: 10px; font-weight: bold;">Activer le moteur pas-à-pas</span>
+                    <span id="motor-config-state" style="margin-left: auto;"></span>
+                </div>
+                <div id="motor-panel" class="motor-panel disabled">
+                    <table id="motor-pins-table">
+                        <thead><tr><th>Signal DM556</th><th>Broche ESP32</th><th>Rôle</th></tr></thead>
+                        <tbody>
+                            <tr><td><b>PUL+</b></td><td><select id="motor-pul-pin"></select></td><td>Train d'impulsions (1 front montant = 1 pas)</td></tr>
+                            <tr><td><b>DIR+</b></td><td><select id="motor-dir-pin"></select></td><td>Sens de rotation (HAUT = avant)</td></tr>
+                            <tr><td><b>EN+</b></td><td><select id="motor-ena-pin"></select></td><td>Activation driver (actif bas, HAUT = désactivé)</td></tr>
+                            <tr><td>PUL- / DIR- / EN-</td><td>Commun</td><td>Câblés sur le commun (GND ou 5V selon la carte)</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="motor-panel-body" style="font-size: 13px; margin-top: 10px;">
+                        Broches autorisées : IO4, IO5, IO12, IO14, IO15. Quand le moteur est actif, ces broches sont réservées et ne peuvent pas être utilisées comme I/O.
+                    </p>
+                </div>
+                <p id="motor-disabled-hint" style="font-size: 13px; margin-top: 10px;">
+                    Moteur non configuré : les broches PUL/DIR/EN sont libres et utilisables comme I/O génériques.
+                </p>
+                <button class="btn btn-primary" style="margin-top: 10px;" onclick="saveMotorConfig()">💾 Enregistrer la configuration moteur & Redémarrer</button>
+            </div>
         </div>
         <!-- TAB CONFIG MQTT -->
         <div id="config" class="tab-content">
@@ -234,7 +272,7 @@
         document.getElementById(tabName).classList.add('active');
         evt.currentTarget.classList.add('active');
         if (tabName === 'status') loadStatus();
-        if (tabName === 'ios') loadIOs();
+        if (tabName === 'ios') { loadIOs(); loadMotorConfig(); }
         if (tabName === 'config' || tabName === 'network') loadConfig();
         // Serial logs are delivered in real-time via WebSocket; no initial HTTP load required.
     }
@@ -317,7 +355,9 @@
             const inputTypeText = io.inputType === 0 ? 'INPUT' : (io.inputType === 1 ? 'PULLUP' : 'PULLDOWN');
             const inputTypeDisplay = io.mode == 1 ? inputTypeText : '-';
             const defaultStateDisplay = io.mode == 2 ? (io.defaultState ? 'HAUT' : 'BAS') : '-';
-            tbody.innerHTML += `<tr><td>${io.name}</td><td>${io.pin}</td><td>${io.mode == 1 ? 'Entrée' : 'Sortie'}</td><td>${inputTypeDisplay}</td><td>${defaultStateDisplay}</td><td><button class="btn btn-danger btn-small" onclick="deleteIO(${index})">X</button></td></tr>`;
+            const conflict = isMotorPin(io.pin);
+            const pinDisplay = conflict ? `${io.pin} <span class="badge badge-warning" title="Broche réservée au moteur DM556">moteur</span>` : io.pin;
+            tbody.innerHTML += `<tr class="${conflict ? 'io-conflict' : ''}"><td>${io.name}</td><td>${pinDisplay}</td><td>${io.mode == 1 ? 'Entrée' : 'Sortie'}</td><td>${inputTypeDisplay}</td><td>${defaultStateDisplay}</td><td><button class="btn btn-danger btn-small" onclick="deleteIO(${index})">X</button></td></tr>`;
         });
     }
 
@@ -342,6 +382,10 @@
         const defaultState = parseInt(document.getElementById('io-default-state').value);
         if (!name || isNaN(pin)) {
             alert("Le nom et la broche sont requis.");
+            return;
+        }
+        if (isMotorPin(pin)) {
+            alert(`La broche ${pin} est réservée au moteur DM556. Désactivez le moteur ou changez ses broches.`);
             return;
         }
         ioPins.push({ name, pin, mode, inputType, defaultState, state: false });
@@ -451,8 +495,71 @@
             .then(() => loadMotorStatus());
     }
 
+    // ===== Configuration moteur DM556 (onglet Configuration I/O) =====
+    const MOTOR_ALLOWED_PINS = [4, 5, 12, 14, 15]; // doit rester aligné avec stepper_motor.cpp
+    let motorConfig = { enabled: false, active: false, pulPin: 4, dirPin: 14, enaPin: 15 };
+    let motorActive = true; // état réel côté firmware, mis à jour par /api/motor/status
+
+    // Broche occupée par le moteur tel qu'il tourne actuellement (config du dernier boot)
+    function isMotorPin(pin) {
+        return motorConfig.active && [motorConfig.pulPin, motorConfig.dirPin, motorConfig.enaPin].includes(pin);
+    }
+
+    function fillMotorPinSelect(id, value) {
+        const sel = document.getElementById(id);
+        sel.innerHTML = MOTOR_ALLOWED_PINS.map(p => `<option value="${p}" ${p === value ? 'selected' : ''}>IO${p}</option>`).join('');
+    }
+
+    function updateMotorPanelState() {
+        const enabled = document.getElementById('motor-enabled').checked;
+        document.getElementById('motor-panel').classList.toggle('disabled', !enabled);
+        document.querySelectorAll('#motor-panel select').forEach(s => s.disabled = !enabled);
+        document.getElementById('motor-disabled-hint').style.display = enabled ? 'none' : 'block';
+    }
+
+    function loadMotorConfig() {
+        fetch('/api/motor/config').then(r => r.json()).then(data => {
+            motorConfig = data;
+            document.getElementById('motor-enabled').checked = data.enabled;
+            fillMotorPinSelect('motor-pul-pin', data.pulPin);
+            fillMotorPinSelect('motor-dir-pin', data.dirPin);
+            fillMotorPinSelect('motor-ena-pin', data.enaPin);
+            document.getElementById('motor-config-state').innerHTML = data.active
+                ? '<span class="badge badge-success">Actif</span>'
+                : '<span class="badge badge-danger">Inactif</span>';
+            updateMotorPanelState();
+            renderIOTable();
+        });
+    }
+
+    function saveMotorConfig() {
+        const body = {
+            enabled: document.getElementById('motor-enabled').checked,
+            pulPin: parseInt(document.getElementById('motor-pul-pin').value),
+            dirPin: parseInt(document.getElementById('motor-dir-pin').value),
+            enaPin: parseInt(document.getElementById('motor-ena-pin').value)
+        };
+        if (body.enabled) {
+            const pins = [body.pulPin, body.dirPin, body.enaPin];
+            if (new Set(pins).size !== 3) { alert('Les broches PUL+, DIR+ et EN+ doivent être différentes.'); return; }
+            const used = ioPins.find(io => pins.includes(io.pin));
+            if (used) { alert(`La broche ${used.pin} est déjà utilisée par l'I/O "${used.name}". Supprimez-le (et enregistrez les I/O) d'abord.`); return; }
+        }
+        fetch('/api/motor/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        }).then(r => r.json()).then(data => {
+            alert(data.message || 'Erreur');
+        });
+    }
+
     function loadMotorStatus() {
+        if (!motorActive) return;
         fetch('/api/motor/status').then(r => r.json()).then(data => {
+            motorActive = data.enabled !== false;
+            document.getElementById('motor-control-section').style.display = motorActive ? 'block' : 'none';
+            if (!motorActive) return;
             document.getElementById('motor-state').innerHTML = data.running
                 ? '<span class="badge badge-success">En mouvement</span>'
                 : '<span class="badge badge-danger">Arrêté</span>';

@@ -132,6 +132,18 @@ void setupWebServer() {
         return;
     }
     JsonArray newIOs = doc["ios"];
+    for (JsonObject ioData : newIOs) {
+        int pin = ioData["pin"] | -1;
+        if (motorIsPinUsed(pin)) {
+            JsonDocument errDoc;
+            errDoc["success"] = false;
+            errDoc["message"] = String("La broche IO") + pin + " (" + (ioData["name"] | "?") + ") est utilisée par le moteur DM556. Désactivez le moteur ou changez ses broches.";
+            String resp;
+            serializeJson(errDoc, resp);
+            request->send(409, "application/json", resp);
+            return;
+        }
+    }
     ioPinCount = 0;
     for (JsonObject ioData : newIOs) {
         if (ioPinCount < MAX_IOS) {
@@ -324,6 +336,7 @@ void setupWebServer() {
   // API pour connaître l'état du moteur (progression du mouvement en cours)
   server.on("/api/motor/status", HTTP_GET, [](AsyncWebServerRequest *request){
     JsonDocument doc;
+    doc["enabled"] = motorIsEnabled();
     doc["running"] = motorIsRunning();
     doc["stepsDone"] = motorGetStepsDone();
     doc["stepsTarget"] = motorGetStepsTarget();
@@ -334,6 +347,77 @@ void setupWebServer() {
     serializeJson(doc, response);
     request->send(200, "application/json", response);
   });
+
+  // API pour récupérer la configuration du moteur (activation + broches DM556)
+  server.on("/api/motor/config", HTTP_GET, [](AsyncWebServerRequest *request){
+    JsonDocument doc;
+    doc["enabled"] = config.motorEnabled;
+    doc["active"] = motorIsEnabled(); // état réel depuis le dernier boot
+    doc["pulPin"] = config.motorPulPin;
+    doc["dirPin"] = config.motorDirPin;
+    doc["enaPin"] = config.motorEnaPin;
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+  });
+
+  // API pour enregistrer la configuration du moteur (redémarrage requis :
+  // le timer et les broches ne sont configurés qu'au boot)
+  server.on("/api/motor/config", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+      JsonDocument doc;
+      if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
+        request->send(400, "application/json", "{\"success\":false, \"message\":\"Invalid JSON\"}");
+        return;
+      }
+
+      bool enabled = doc["enabled"] | false;
+      int pul = doc["pulPin"] | (int)config.motorPulPin;
+      int dir = doc["dirPin"] | (int)config.motorDirPin;
+      int ena = doc["enaPin"] | (int)config.motorEnaPin;
+
+      String errorMsg;
+      if (enabled) {
+        if (!motorValidatePins(pul, dir, ena, errorMsg)) {
+          // déjà rempli par motorValidatePins
+        } else if (config.useSerialBridge &&
+                   (pul == config.serialRxPin || pul == config.serialTxPin ||
+                    dir == config.serialRxPin || dir == config.serialTxPin ||
+                    ena == config.serialRxPin || ena == config.serialTxPin)) {
+          errorMsg = "Conflit avec les broches du pont série (RX=IO" + String(config.serialRxPin) + ", TX=IO" + String(config.serialTxPin) + ")";
+        } else {
+          for (int i = 0; i < ioPinCount; i++) {
+            int p = ioPins[i].pin;
+            if (p == pul || p == dir || p == ena) {
+              errorMsg = String("Conflit : la broche IO") + p + " est déjà utilisée par l'I/O \"" + ioPins[i].name + "\". Supprimez-le d'abord.";
+              break;
+            }
+          }
+        }
+      }
+      if (errorMsg.length() > 0) {
+        JsonDocument errDoc;
+        errDoc["success"] = false;
+        errDoc["message"] = errorMsg;
+        String resp;
+        serializeJson(errDoc, resp);
+        request->send(409, "application/json", resp);
+        return;
+      }
+
+      config.motorEnabled = enabled;
+      if (enabled) {
+        config.motorPulPin = pul;
+        config.motorDirPin = dir;
+        config.motorEnaPin = ena;
+      }
+      saveConfig();
+
+      request->send(200, "application/json", "{\"success\":true, \"message\":\"Configuration moteur enregistrée, redémarrage...\"}");
+      delay(1000);
+      ESP.restart();
+    }
+  );
 
   // ElegantOTA pour les mises à jour
   ElegantOTA.begin(&server);

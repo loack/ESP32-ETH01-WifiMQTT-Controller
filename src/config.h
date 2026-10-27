@@ -19,18 +19,18 @@
 #define RELAY_K1        4   // IO4  — sortie relais K1
 #define RELAY_K2        5   // IO5  — sortie relais K2 (pull-up interne au boot, inoffensif)
 
-// --- Driver moteur pas-à-pas DM556 ---
-// Sur cette configuration, IO4 n'est plus câblé au relais K1 (RELAY_K1
-// ci-dessus est donc obsolète sur cette variante de carte).
+// --- Driver moteur pas-à-pas DM556 (optionnel) ---
+// Le moteur s'active/désactive depuis l'interface web (onglet "Configuration
+// I/O"). Les broches ci-dessous ne sont que les valeurs par défaut : elles
+// sont modifiables et persistées dans Config (motorPulPin/DirPin/EnaPin).
+// Moteur désactivé = le firmware ne touche à aucune de ces broches, elles
+// restent libres pour des I/O génériques.
+#define MOTOR_DEFAULT_ENABLED true // conserve le comportement des cartes déjà câblées
 #define MOTOR_PUL       4   // IO4  — signal PUL+ (pas)
 #define MOTOR_DIR      14   // IO14 — signal DIR+ (direction)
 #define MOTOR_ENA      15   // IO15 — signal EN+ (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
 
 // --- I²C vers module CJMCU-2317 (MCP23017) ---
-// ⚠️ IO32/IO33 sont aussi listés plus haut comme MOTOR_PUL/MOTOR_DIR (DM556).
-// Tant qu'aucun code moteur n'utilise ces macros, il n'y a pas de conflit
-// réel, mais il faudra reassigner l'un des deux jeux de pins avant d'ajouter
-// la gestion du moteur pas-à-pas.
 #define I2C_SDA        33   // IO33 — SDA
 #define I2C_SCL        32   // IO32 — SCL
 #define MCP23017_INTA  36   // IO36 — interruption port A (non utilisée : port A = sorties)
@@ -96,6 +96,12 @@ struct Config {
   int serialRxPin;
   int serialTxPin;
   long serialBaudRate;
+
+  // Stepper motor (DM556) settings — optionnel
+  bool motorEnabled;
+  uint8_t motorPulPin;
+  uint8_t motorDirPin;
+  uint8_t motorEnaPin;
 
   bool initialized;
 };

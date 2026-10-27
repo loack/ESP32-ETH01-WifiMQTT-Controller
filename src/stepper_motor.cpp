@@ -4,8 +4,16 @@
 
 extern void logMessage(const String& message);
 extern void logPrintf(const char* fmt, ...);
+extern Config config;
 
 static hw_timer_t *s_timer = NULL;
+
+// Copie des réglages lus au boot (un changement de config impose un
+// redémarrage) : évite que l'ISR lise une broche modifiée à chaud.
+static bool s_enabled = false;
+static uint8_t s_pulPin = MOTOR_PUL;
+static uint8_t s_dirPin = MOTOR_DIR;
+static uint8_t s_enaPin = MOTOR_ENA;
 
 static volatile bool s_running = false;
 static volatile bool s_pulseHigh = false;
@@ -40,13 +48,13 @@ static uint32_t s_lastAccel = 0;
 static void IRAM_ATTR onMotorTimer() {
   if (!s_running) return;
   s_pulseHigh = !s_pulseHigh;
-  digitalWrite(MOTOR_PUL, s_pulseHigh ? HIGH : LOW);
+  digitalWrite(s_pulPin, s_pulseHigh ? HIGH : LOW);
   if (!s_pulseHigh) return; // seul le front montant compte comme un pas
 
   s_stepsDone++;
   if (s_stepsDone >= s_stepsTarget) {
     s_running = false;
-    digitalWrite(MOTOR_PUL, LOW);
+    digitalWrite(s_pulPin, LOW);
     timerAlarmDisable(s_timer);
     return;
   }
@@ -73,21 +81,72 @@ static void IRAM_ATTR onMotorTimer() {
   timerAlarmWrite(s_timer, halfPeriodUs, true);
 }
 
+// GPIO de sortie exposés sur les headers du WT32-ETH01 et non utilisés par
+// le firmware (Ethernet, UART0, I2C MCP23017 = IO32/IO33, LED = IO2).
+// IO35/36/39 sont input-only.
+static const uint8_t MOTOR_ALLOWED_PINS[] = { 4, 5, 12, 14, 15 };
+
+bool motorValidatePins(int pul, int dir, int ena, String &errorMsg) {
+  const int pins[3] = { pul, dir, ena };
+  const char *names[3] = { "PUL+", "DIR+", "EN+" };
+  for (int i = 0; i < 3; i++) {
+    bool allowed = false;
+    for (uint8_t p : MOTOR_ALLOWED_PINS) {
+      if (pins[i] == p) { allowed = true; break; }
+    }
+    if (!allowed) {
+      errorMsg = String("Broche ") + names[i] + " invalide (IO" + String(pins[i]) + ") : choisir parmi IO4, IO5, IO12, IO14, IO15";
+      return false;
+    }
+  }
+  if (pul == dir || pul == ena || dir == ena) {
+    errorMsg = "Les broches PUL+, DIR+ et EN+ doivent être différentes";
+    return false;
+  }
+  return true;
+}
+
 void motorBegin() {
-  pinMode(MOTOR_PUL, OUTPUT);
-  pinMode(MOTOR_DIR, OUTPUT);
-  pinMode(MOTOR_ENA, OUTPUT);
-  digitalWrite(MOTOR_PUL, LOW);
-  digitalWrite(MOTOR_DIR, LOW);
-  digitalWrite(MOTOR_ENA, HIGH); // driver désactivé au repos (EN+ actif bas)
+  s_enabled = config.motorEnabled;
+  if (!s_enabled) {
+    logMessage("Moteur pas-à-pas DM556 désactivé : broches PUL/DIR/EN libres pour les I/O.");
+    return;
+  }
+
+  String err;
+  if (!motorValidatePins(config.motorPulPin, config.motorDirPin, config.motorEnaPin, err)) {
+    logPrintf("⚠️ Config moteur invalide (%s) : moteur désactivé.", err.c_str());
+    s_enabled = false;
+    return;
+  }
+  s_pulPin = config.motorPulPin;
+  s_dirPin = config.motorDirPin;
+  s_enaPin = config.motorEnaPin;
+
+  pinMode(s_pulPin, OUTPUT);
+  pinMode(s_dirPin, OUTPUT);
+  pinMode(s_enaPin, OUTPUT);
+  digitalWrite(s_pulPin, LOW);
+  digitalWrite(s_dirPin, LOW);
+  digitalWrite(s_enaPin, HIGH); // driver désactivé au repos (EN+ actif bas)
 
   s_timer = timerBegin(0, 80, true); // timer HW #0, prédiviseur 80 -> 1 tick = 1µs (APB 80MHz)
   timerAttachInterrupt(s_timer, &onMotorTimer, true);
 
-  logPrintf("✓ Moteur pas-à-pas DM556 initialisé (PUL=IO%d, DIR=IO%d, EN=IO%d)", MOTOR_PUL, MOTOR_DIR, MOTOR_ENA);
+  logPrintf("✓ Moteur pas-à-pas DM556 initialisé (PUL=IO%d, DIR=IO%d, EN=IO%d)", s_pulPin, s_dirPin, s_enaPin);
+}
+
+bool motorIsEnabled() { return s_enabled; }
+
+bool motorIsPinUsed(int pin) {
+  return s_enabled && (pin == s_pulPin || pin == s_dirPin || pin == s_enaPin);
 }
 
 bool motorStart(uint32_t steps, bool forward, uint32_t speedStepsPerSec, uint32_t accelStepsPerSec2, String &errorMsg) {
+  if (!s_enabled) {
+    errorMsg = "Moteur désactivé (voir Configuration I/O)";
+    return false;
+  }
   if (s_running) {
     errorMsg = "Un mouvement est déjà en cours";
     return false;
@@ -101,12 +160,12 @@ bool motorStart(uint32_t steps, bool forward, uint32_t speedStepsPerSec, uint32_
     return false;
   }
 
-  digitalWrite(MOTOR_DIR, forward ? HIGH : LOW);
+  digitalWrite(s_dirPin, forward ? HIGH : LOW);
   delayMicroseconds(10); // temps de setup DIR->PUL requis par le DM556 avant le premier pas
-  digitalWrite(MOTOR_ENA, LOW); // active le driver
+  digitalWrite(s_enaPin, LOW); // active le driver
 
   s_pulseHigh = false;
-  digitalWrite(MOTOR_PUL, LOW);
+  digitalWrite(s_pulPin, LOW);
   s_stepsDone = 0;
   s_stepsTarget = steps;
   s_lastForward = forward;
@@ -132,10 +191,11 @@ bool motorStart(uint32_t steps, bool forward, uint32_t speedStepsPerSec, uint32_
 }
 
 void motorStop() {
+  if (!s_enabled) return;
   s_running = false;
   timerAlarmDisable(s_timer);
-  digitalWrite(MOTOR_PUL, LOW);
-  digitalWrite(MOTOR_ENA, HIGH);
+  digitalWrite(s_pulPin, LOW);
+  digitalWrite(s_enaPin, HIGH);
   logMessage("⏹ Moteur arrêté.");
 }
 

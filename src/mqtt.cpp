@@ -49,6 +49,10 @@ String getFormattedTime() {
 }
 
 void executeCommand(int pin, int state) {
+  if (motorIsPinUsed(pin)) {
+    logPrintf("⚠️ Commande ignorée : pin %d utilisé par le moteur DM556", pin);
+    return;
+  }
   if (isMcpVirtualPin(pin)) {
     mcpIoWrite(pin, state);
   } else {
@@ -93,6 +97,7 @@ void executeCommand(int pin, int state) {
 }
 
 void publishMotorStatus() {
+  if (!motorIsEnabled()) return;
   JsonDocument doc;
   doc["running"] = motorIsRunning();
   doc["stepsDone"] = motorGetStepsDone();
@@ -382,16 +387,18 @@ void reconnectMQTT() {
     mqttClient.subscribe(pingTopic.c_str());
     logPrintf("✓ Abonné à: %s", pingTopic.c_str());
 
-    // Subscribe to stepper motor (DM556) command topics
-    String motorMoveTopic = String(config.deviceName) + "/motor/move";
-    mqttClient.subscribe(motorMoveTopic.c_str());
-    logPrintf("✓ Abonné à: %s", motorMoveTopic.c_str());
-    String motorStopTopic = String(config.deviceName) + "/motor/stop";
-    mqttClient.subscribe(motorStopTopic.c_str());
-    logPrintf("✓ Abonné à: %s", motorStopTopic.c_str());
+    // Subscribe to stepper motor (DM556) command topics (only if the motor is enabled)
+    if (motorIsEnabled()) {
+        String motorMoveTopic = String(config.deviceName) + "/motor/move";
+        mqttClient.subscribe(motorMoveTopic.c_str());
+        logPrintf("✓ Abonné à: %s", motorMoveTopic.c_str());
+        String motorStopTopic = String(config.deviceName) + "/motor/stop";
+        mqttClient.subscribe(motorStopTopic.c_str());
+        logPrintf("✓ Abonné à: %s", motorStopTopic.c_str());
 
-    // Publish current motor status (retained) so subscribers know its state on (re)connect
-    publishMotorStatus();
+        // Publish current motor status (retained) so subscribers know its state on (re)connect
+        publishMotorStatus();
+    }
 
     // Subscribe to serial bridge topic
     if (config.useSerialBridge) {

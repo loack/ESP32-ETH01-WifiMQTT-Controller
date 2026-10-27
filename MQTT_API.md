@@ -27,7 +27,9 @@ Chaque message reçu via MQTT et transmis sur le port série est journalisé (ti
 
 ### 2.5. Moteur pas-à-pas (DM556)
 
-Pilote le moteur pas-à-pas connecté au driver DM556 (PUL+=IO4, DIR+=IO14, EN+=IO15).
+Pilote le moteur pas-à-pas connecté au driver DM556 (par défaut PUL+=IO4, DIR+=IO14, EN+=IO15 ; broches modifiables dans l'onglet web « Configuration I/O »).
+
+Le moteur est **optionnel** : s'il est désactivé dans l'interface web, l'ESP32 ne s'abonne pas aux sujets `motor/*`, ne publie pas `status/motor`, et les broches PUL/DIR/EN redeviennent utilisables comme I/O génériques.
 
 - **Sujet :** `<device_name>/motor/move`
 - **Méthode :** Publier
