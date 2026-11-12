@@ -48,10 +48,11 @@ String getFormattedTime() {
   return String(timeStr);
 }
 
-void executeCommand(int pin, int state) {
+// Ecriture materielle seule (sans MQTT) : chemin court utilise par la liaison UDP et le deadman.
+// Retourne false si la broche est reservee au moteur.
+bool setOutput(int pin, int state) {
   if (motorIsPinUsed(pin)) {
-    logPrintf("⚠️ Commande ignorée : pin %d utilisé par le moteur DM556", pin);
-    return;
+    return false;
   }
   if (isMcpVirtualPin(pin)) {
     mcpIoWrite(pin, state);
@@ -64,36 +65,48 @@ void executeCommand(int pin, int state) {
       break;
     }
   }
+  return true;
+}
 
-  // Publish status
+// Publie le statut MQTT d'une sortie. src : origine (nullptr = comportement historique,
+// "udp" ou "watchdog" ajoute le champ "src" au JSON).
+void publishPinStatus(int pin, int state, const char* src) {
   char topic[128];
   int pinIndex = -1;
-  for(int i=0; i<ioPinCount; i++) {
-    if(ioPins[i].pin == pin) {
+  for (int i = 0; i < ioPinCount; i++) {
+    if (ioPins[i].pin == pin) {
       pinIndex = i;
       break;
     }
   }
-  if(pinIndex != -1) {
-    snprintf(topic, sizeof(topic), "%s/status/%s", config.deviceName, ioPins[pinIndex].name);
-    
-    // Obtenir le temps avec précision microseconde
-    uint64_t timeUs = getCurrentTimeMicros();
-    uint32_t seconds = timeUs / 1000000ULL;
-    uint32_t us = timeUs % 1000000ULL;
-    
-    JsonDocument doc;
-    doc["state"] = state;
-    doc["timestamp"] = seconds;
-    doc["us"] = us;  // Microsecondes
-    
-    char payload[128];
-    serializeJson(doc, payload);
+  if (pinIndex == -1) return;
+  snprintf(topic, sizeof(topic), "%s/status/%s", config.deviceName, ioPins[pinIndex].name);
 
-    if (mqttEnabled && mqttClient.connected()) {
-      publishMQTT(topic, payload);
-    }
+  // Obtenir le temps avec precision microseconde
+  uint64_t timeUs = getCurrentTimeMicros();
+  uint32_t seconds = timeUs / 1000000ULL;
+  uint32_t us = timeUs % 1000000ULL;
+
+  JsonDocument doc;
+  doc["state"] = state;
+  doc["timestamp"] = seconds;
+  doc["us"] = us;  // Microsecondes
+  if (src) doc["src"] = src;
+
+  char payload[128];
+  serializeJson(doc, payload);
+
+  if (mqttEnabled && mqttClient.connected()) {
+    publishMQTT(topic, payload);
   }
+}
+
+void executeCommand(int pin, int state) {
+  if (!setOutput(pin, state)) {
+    logPrintf("⚠️ Commande ignorée : pin %d utilisé par le moteur DM556", pin);
+    return;
+  }
+  publishPinStatus(pin, state, nullptr);
 }
 
 void publishMotorStatus() {

@@ -16,6 +16,7 @@
 #include "serial_manager.h"
 #include "mcp23017.h"
 #include "stepper_motor.h"
+#include "udp_link.h"
 
 // WebSocket declared in web_server.cpp
 extern AsyncWebSocket ws;
@@ -404,6 +405,7 @@ void setup() {
 
   // Setup MQTT
   setupMQTT();
+  udpLinkBegin();  // liaison UDP directe (desactivee par defaut, MQTT inchange)
   if (strlen(config.mqttServer) > 0) {
     logMessage("MQTT configuration found, enabling MQTT.");
     mqttEnabled = true;
@@ -440,6 +442,7 @@ void loop() {
 
   processScheduledCommands();
   serialManager.loop();
+  udpLinkDrainMqtt(); // statuts MQTT des sorties changees par UDP / deadman
   checkMotorStatusChange(); // publie <device>/status/motor sur MQTT dès que le moteur démarre/s'arrête
 
   // Check network connection (WiFi or Ethernet)
@@ -661,6 +664,7 @@ void handleIOs(void *pvParameters) {
         // Détection immédiate du changement d'état (sans debounce)
         if (currentState != ioPins[i].state) {
           ioPins[i].state = currentState;
+          udpLinkNotifyInput(i, currentState); // chemin court UDP : avant tout journal ou JSON
           logPrintf("Input '%s' (pin %d) changed to %s", ioPins[i].name, ioPins[i].pin, currentState ? "HIGH" : "LOW");
           
           char topic[128];

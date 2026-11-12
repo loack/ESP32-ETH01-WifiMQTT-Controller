@@ -27,6 +27,9 @@ void reconnectMQTT();
 void publishMQTT(const char* sub_topic, const char* payload, boolean retained = false);
 void mqtt_callback(char* topic, byte* payload, unsigned int length);
 void executeCommand(int pin, int state);
+// Ecriture materielle seule et publication de statut separees (liaison UDP, deadman)
+bool setOutput(int pin, int state);
+void publishPinStatus(int pin, int state, const char* src);
 
 // Moteur pas-à-pas (DM556) : publie l'état courant sur <device>/status/motor
 // et détecte les transitions démarré/arrêté pour publier automatiquement,

@@ -4,6 +4,7 @@
 #include "serial_manager.h"
 #include "mcp23017.h"
 #include "stepper_motor.h"
+#include "udp_link.h"
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -35,6 +36,8 @@ void setupWebServer() {
     request->send(SPIFFS, "/index.html", "text/html");
   });
   
+  udpLinkRegisterRoutes(server); // /api/udp (liaison UDP directe)
+
   // API pour le statut système complet
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
     JsonDocument doc;

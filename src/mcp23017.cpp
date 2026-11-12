@@ -30,7 +30,15 @@ extern IOPin ioPins[];
 extern int ioPinCount;
 extern void saveIOs();
 
+// Mutex du bus I2C : la liaison UDP, le deadman et la tache d'entrees y acces concurremment.
+static SemaphoreHandle_t s_i2cMutex = nullptr;
+struct I2cLock {
+  I2cLock() { if (s_i2cMutex) xSemaphoreTake(s_i2cMutex, portMAX_DELAY); }
+  ~I2cLock() { if (s_i2cMutex) xSemaphoreGive(s_i2cMutex); }
+};
+
 static bool mcpWriteReg(uint8_t reg, uint8_t value) {
+  I2cLock lock;
   Wire.beginTransmission(MCP_I2C_ADDR);
   Wire.write(reg);
   Wire.write(value);
@@ -38,6 +46,7 @@ static bool mcpWriteReg(uint8_t reg, uint8_t value) {
 }
 
 static bool mcpReadReg(uint8_t reg, uint8_t &value) {
+  I2cLock lock;
   Wire.beginTransmission(MCP_I2C_ADDR);
   Wire.write(reg);
   if (Wire.endTransmission(false) != 0) return false; // repeated start, pas de STOP
@@ -47,6 +56,7 @@ static bool mcpReadReg(uint8_t reg, uint8_t &value) {
 }
 
 void mcpIoBegin() {
+  if (!s_i2cMutex) s_i2cMutex = xSemaphoreCreateMutex();
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(400000);
 
