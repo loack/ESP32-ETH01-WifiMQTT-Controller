@@ -172,7 +172,7 @@ static const UdpOutCfg* outCfgForPin(int pin) {
 // ===== Persistance =====
 static void setDefaults() {
   memset(&cfg, 0, sizeof(cfg));
-  cfg.enabled = false;
+  cfg.enabled = FW_UDP_DEFAULT_ENABLED;
   cfg.port = DEFAULT_PORT;
   cfg.deviceId = 1;
   cfg.statePeriodMs = 100;
@@ -183,7 +183,7 @@ static void setDefaults() {
 static void loadCfg() {
   setDefaults();
   prefs.begin("udp-link", true);
-  cfg.enabled = prefs.getBool("en", false);
+  cfg.enabled = prefs.getBool("en", FW_UDP_DEFAULT_ENABLED);
   cfg.port = prefs.getUShort("port", DEFAULT_PORT);
   prefs.getString("host", cfg.masterHost, sizeof(cfg.masterHost));
   cfg.deviceId = prefs.getUChar("devid", 1);

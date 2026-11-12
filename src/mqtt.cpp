@@ -4,6 +4,7 @@
 #include "serial_manager.h"
 #include "mcp23017.h"
 #include "stepper_motor.h"
+#include "fw_version.h"
 #include <ArduinoJson.h>
 #include <time.h>
 #include <sys/time.h>
@@ -385,6 +386,12 @@ void reconnectMQTT() {
     char availabilityTopic[128];
     snprintf(availabilityTopic, sizeof(availabilityTopic), "%s/availability", config.deviceName);
     publishMQTT(availabilityTopic, "online", true);
+
+    // Identite du firmware (retenue) : <device>/info
+    char infoTopic[128], infoPayload[200];
+    snprintf(infoTopic, sizeof(infoTopic), "%s/info", config.deviceName);
+    fwInfoMqtt(infoPayload, sizeof(infoPayload));
+    publishMQTT(infoTopic, infoPayload, true);
 
     // Subscribe to control topics
     String controlTopic = String(config.deviceName) + "/control/#";

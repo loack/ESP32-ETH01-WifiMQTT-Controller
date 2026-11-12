@@ -2,6 +2,7 @@
 #define CONFIG_H
 
 #include <Arduino.h>
+#include "variant.h"
 
 #define MAX_IOS 40  // 20 IOs natifs + 16 broches virtuelles MCP23017 (A0-A7 / B0-B7) + marge
 #define MAX_LOG_LINES 64
@@ -25,10 +26,15 @@
 // sont modifiables et persistées dans Config (motorPulPin/DirPin/EnaPin).
 // Moteur désactivé = le firmware ne touche à aucune de ces broches, elles
 // restent libres pour des I/O génériques.
-#define MOTOR_DEFAULT_ENABLED true // conserve le comportement des cartes déjà câblées
+#define MOTOR_DEFAULT_ENABLED FW_FEAT_MOTOR // variante 24 V : moteur actif par défaut ; E/S simple : jamais
 #define MOTOR_PUL       4   // IO4  — signal PUL+ (pas)
 #define MOTOR_DIR      14   // IO14 — signal DIR+ (direction)
 #define MOTOR_ENA      15   // IO15 — signal EN+ (enable, actif-bas) — pull-up au boot = moteur désactivé ✓
+
+static_assert(!FW_FEAT_MOTOR || (!fwEthReserved(MOTOR_PUL) && !fwEthReserved(MOTOR_DIR) && !fwEthReserved(MOTOR_ENA)),
+              "broche moteur sur le PHY Ethernet ou l'UART0");
+static_assert(!FW_FEAT_MOTOR || (MOTOR_PUL != MOTOR_DIR && MOTOR_PUL != MOTOR_ENA && MOTOR_DIR != MOTOR_ENA),
+              "broches moteur en double");
 
 // --- I²C vers module CJMCU-2317 (MCP23017) ---
 #define I2C_SDA        33   // IO33 — SDA
@@ -85,6 +91,7 @@ struct Config {
   char mqttUser[32];
   char mqttPassword[32];
   char mqttTopic[32];
+  bool mqttActive;       // MQTT actif (réglage persistant ; sans effet si MQTT non compilé)
 
   // NTP Settings
   char ntpServer[64];

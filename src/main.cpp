@@ -406,7 +406,7 @@ void setup() {
   // Setup MQTT
   setupMQTT();
   udpLinkBegin();  // liaison UDP directe (desactivee par defaut, MQTT inchange)
-  if (strlen(config.mqttServer) > 0) {
+  if (FW_MQTT && config.mqttActive && strlen(config.mqttServer) > 0) {
     logMessage("MQTT configuration found, enabling MQTT.");
     mqttEnabled = true;
     blinkStatusLED(2, 100);  // Signal MQTT activé
@@ -539,6 +539,10 @@ void loadConfig() {
   config.serialBaudRate = preferences.getLong("serBaud", 9600);
 
   config.motorEnabled = preferences.getBool("motorEn", MOTOR_DEFAULT_ENABLED);
+#if !FW_FEAT_MOTOR
+  config.motorEnabled = false;  // variante E/S simple : GPIO 4/14/15 jamais touchés par le moteur
+#endif
+  config.mqttActive = preferences.getBool("mqttOn", true);
   config.motorPulPin = preferences.getUChar("motorPul", MOTOR_PUL);
   config.motorDirPin = preferences.getUChar("motorDir", MOTOR_DIR);
   config.motorEnaPin = preferences.getUChar("motorEna", MOTOR_ENA);
@@ -572,6 +576,7 @@ void saveConfig() {
   preferences.putLong("serBaud", config.serialBaudRate);
 
   preferences.putBool("motorEn", config.motorEnabled);
+  preferences.putBool("mqttOn", config.mqttActive);
   preferences.putUChar("motorPul", config.motorPulPin);
   preferences.putUChar("motorDir", config.motorDirPin);
   preferences.putUChar("motorEna", config.motorEnaPin);

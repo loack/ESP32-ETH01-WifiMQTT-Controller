@@ -56,6 +56,9 @@ static bool mcpReadReg(uint8_t reg, uint8_t &value) {
 }
 
 void mcpIoBegin() {
+#if !FW_FEAT_MCP
+  return;  // variante E/S simple : ni I2C (IO32/33) ni interruptions (IO36/39)
+#endif
   if (!s_i2cMutex) s_i2cMutex = xSemaphoreCreateMutex();
   Wire.begin(I2C_SDA, I2C_SCL);
   Wire.setClock(400000);
@@ -137,6 +140,9 @@ bool mcpIoRead(int pin) {
 }
 
 void mcpEnsureDefaultIOsRegistered() {
+#if !FW_FEAT_MCP
+  return;  // variante E/S simple : la liste d'E/S n'est pas modifiée
+#endif
   if (preferences.getBool("mcpIosAdded", false)) return;
 
   bool added = false;

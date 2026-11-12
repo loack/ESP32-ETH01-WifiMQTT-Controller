@@ -5,6 +5,7 @@
 #include "mcp23017.h"
 #include "stepper_motor.h"
 #include "udp_link.h"
+#include "fw_version.h"
 #include <ElegantOTA.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
@@ -37,6 +38,16 @@ void setupWebServer() {
   });
   
   udpLinkRegisterRoutes(server); // /api/udp (liaison UDP directe)
+
+  // Identite du firmware (variante, commit, date, indicateurs)
+  server.on("/api/info", HTTP_GET, [](AsyncWebServerRequest *request){
+    JsonDocument doc;
+    fwInfoFill(doc.to<JsonObject>());
+    doc["mqttActive"] = FW_MQTT && config.mqttActive;
+    String response;
+    serializeJson(doc, response);
+    request->send(200, "application/json", response);
+  });
 
   // API pour le statut système complet
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -177,6 +188,8 @@ void setupWebServer() {
     doc["mqttPort"] = config.mqttPort;
     doc["mqttUser"] = config.mqttUser;
     doc["mqttTopic"] = config.mqttTopic;
+    doc["mqttActive"] = config.mqttActive;
+    doc["mqttCompiled"] = FW_MQTT;
 
     doc["useSerialBridge"] = config.useSerialBridge;
     doc["serialRxPin"] = config.serialRxPin;
@@ -217,6 +230,7 @@ void setupWebServer() {
         strlcpy(config.mqttPassword, doc["mqttPassword"], sizeof(config.mqttPassword));
       }
       if (doc["mqttTopic"]) strlcpy(config.mqttTopic, doc["mqttTopic"], sizeof(config.mqttTopic));
+      if (doc["mqttActive"].is<bool>()) config.mqttActive = doc["mqttActive"];  // MQTT on/off sans reflasher (redémarrage)
       
       if (doc["useSerialBridge"].is<bool>()) config.useSerialBridge = doc["useSerialBridge"];
       if (doc["serialRxPin"]) config.serialRxPin = doc["serialRxPin"];
@@ -233,6 +247,10 @@ void setupWebServer() {
 
   // API pour contrôler la connexion MQTT
   server.on("/api/mqtt/connect", HTTP_POST, [](AsyncWebServerRequest *request){
+    if (!FW_MQTT || !config.mqttActive) {
+      request->send(409, "application/json", "{\"success\":false, \"message\":\"MQTT désactivé (compilation ou configuration).\"}");
+      return;
+    }
     mqttEnabled = true;
     reconnectMQTT();
     request->send(200, "application/json", "{\"success\":true, \"message\":\"Tentative de connexion MQTT lancée.\"}");
@@ -380,7 +398,10 @@ void setupWebServer() {
       int ena = doc["enaPin"] | (int)config.motorEnaPin;
 
       String errorMsg;
-      if (enabled) {
+#if !FW_FEAT_MOTOR
+      if (enabled) errorMsg = "moteur non compilé dans cette variante de firmware";
+#endif
+      if (enabled && errorMsg.length() == 0) {
         if (!motorValidatePins(pul, dir, ena, errorMsg)) {
           // déjà rempli par motorValidatePins
         } else if (config.useSerialBridge &&
